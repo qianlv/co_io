@@ -49,9 +49,8 @@ public:
 
     bool await_ready() { return false; }
 
-    auto await_suspend(std::coroutine_handle<> handle) {
+    void await_suspend(std::coroutine_handle<> handle) {
       handle_.promise().previous_handle_ = handle;
-      return handle_;
     }
 
     T await_resume() { return handle_.promise().return_value_; }
@@ -65,6 +64,12 @@ public:
 
   Task(Task&&) = default;
   Task& operator=(Task&&) = default;
+
+  ~Task() { 
+    if (handle_) {
+      handle_.destroy();
+    }
+  }
 
 private:
   handle_type handle_;

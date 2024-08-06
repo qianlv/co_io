@@ -50,6 +50,8 @@ public:
 
 class PollerBase {
 public:
+  PollerBase() { instance = this; }
+
   struct PollerEvent {
     int fd;
     PollEvent event;
@@ -65,12 +67,16 @@ public:
 
   virtual void poll() = 0;
 
-  virtual ~PollerBase() = default;
+  virtual ~PollerBase() { instance = nullptr; }
+
+  static inline thread_local PollerBase *instance = nullptr;
+
+  static PollerBase &get() { return *instance; }
 };
 
 class SelectPoller : public PollerBase {
 public:
-  SelectPoller() {
+  SelectPoller() : PollerBase() {
     FD_ZERO(&read_set_);
     FD_ZERO(&write_set_);
   }
@@ -163,9 +169,9 @@ private:
 class EPollPoller : public PollerBase {
 public:
   EPollPoller()
-      : epoll_fd_(detail::system_call_value(epoll_create1(0))
-                      .execption("epoll_create1")) {}
-  ~EPollPoller() { ::close(epoll_fd_); }
+      : PollerBase(), epoll_fd_(detail::system_call_value(epoll_create1(0))
+                                    .execption("epoll_create1")) {}
+  ~EPollPoller() override { ::close(epoll_fd_); }
 
   void register_fd(int fd) override {
     struct epoll_event ev;
@@ -199,8 +205,12 @@ public:
   void poll() override {
     spdlog::debug("poll...");
     std::array<struct epoll_event, 128> events;
-    int n = detail::system_call(epoll_pwait2(epoll_fd_, events.data(),
-                                             events.size(), nullptr, nullptr))
+    // int n = detail::system_call(epoll_pwait2(epoll_fd_, events.data(),
+    //                                          events.size(), nullptr,
+    //                                          nullptr))
+    //             .execption("epoll_wait");
+    int n = detail::system_call(
+                epoll_pwait(epoll_fd_, events.data(), events.size(), -1, nullptr))
                 .execption("epoll_wait");
     for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
       auto &ev = events[i];

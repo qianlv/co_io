@@ -29,7 +29,7 @@ TaskVoid server(AsyncFile &async_file) {
     auto t = co_await async_file.async_accept<int>(addr);
     int fd = t.value();
     spdlog::debug("new connection: {}", fd);
-    client(AsyncFile{fd, async_file.get_poller()});
+    client(AsyncFile{fd});
   }
 }
 
@@ -38,16 +38,16 @@ int main(int argc, char *argv[]) {
   (void)argv;
 
   spdlog::set_level(spdlog::level::debug);
-  std::shared_ptr<PollerBase> poller = std::make_shared<SelectPoller>();
+  EPollPoller poller;
   // std::shared_ptr<PollerBase> poller = std::make_shared<EPollPoller>();
 
   AddressSolver solver{"localhost", "12345"};
   AddressSolver::AddressInfo info = solver.get_address_info();
-  AsyncFile async_file = AsyncFile::bind(info, poller);
+  AsyncFile async_file = AsyncFile::bind(info);
 
   server(async_file);
   while (true) {
-    poller->poll();
+    poller.poll();
   }
   return 0;
 }

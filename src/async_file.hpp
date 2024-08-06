@@ -101,15 +101,13 @@ struct AddressSolver {
 
 class AsyncFile : public FileDescriptor {
 public:
-  explicit AsyncFile(int fd, std::shared_ptr<PollerBase> poller)
-      : FileDescriptor(fd), poller_(poller) {
+  explicit AsyncFile(int fd)
+      : FileDescriptor(fd) {
     auto flags = detail::system_call(fcntl(fd, F_GETFL)).execption("fcntl");
     detail::system_call(fcntl(fd, F_SETFL, flags | O_NONBLOCK))
         .execption("fcntl");
-    poller_->register_fd(fd);
+    PollerBase::get().register_fd(fd);
   }
-
-  std::shared_ptr<PollerBase> get_poller() { return poller_; }
 
   template <typename Ret>
   Task<detail::system_call_value<Ret>> async_read(void *buf, size_t size) {
@@ -118,7 +116,7 @@ public:
       spdlog::debug("async_read: {}", fd);
       return detail::system_call(::read(fd, buf, size));
     });
-    poller_->update_fd(fd, PollEvent::read(), task.get_handle());
+    PollerBase::get().update_fd(fd, PollEvent::read(), task.get_handle());
     return task;
   }
 
@@ -128,7 +126,7 @@ public:
     auto task = async_r<ssize_t>([fd, buf, size]() {
       return detail::system_call(::write(fd, buf, size));
     });
-    poller_->update_fd(fd, PollEvent::write(), task.get_handle());
+    PollerBase::get().update_fd(fd, PollEvent::write(), task.get_handle());
     return task;
   }
 
@@ -140,7 +138,7 @@ public:
       spdlog::debug("async_accept: {}", fd);
       return detail::system_call(::accept(fd, nullptr, nullptr));
     });
-    poller_->update_fd(fd, PollEvent::read(), task.get_handle());
+    PollerBase::get().update_fd(fd, PollEvent::read(), task.get_handle());
     return task;
   }
 
@@ -151,13 +149,12 @@ public:
     auto task = async_r<int>([fd, &addr]() {
       return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
     });
-    poller_->update_fd(fd, PollEvent::write(), task.get_handle());
+    PollerBase::get().update_fd(fd, PollEvent::write(), task.get_handle());
     return task;
   }
 
-  static AsyncFile bind(AddressSolver::AddressInfo const &addr,
-                        std::shared_ptr<PollerBase> poller) {
-    auto async_file = AsyncFile(addr.create_socket(), poller);
+  static AsyncFile bind(AddressSolver::AddressInfo const &addr) {
+    auto async_file = AsyncFile(addr.create_socket());
     AddressSolver::Address serve = addr.get_address();
     int on = 1;
     detail::system_call(
@@ -182,15 +179,11 @@ public:
   ~AsyncFile() {
     spdlog::debug("desctructor: {}", fd());
     if (fd() != -1) {
-      poller_->unregister_fd(fd());
+      PollerBase::get().unregister_fd(fd());
     }
   }
 
 private:
-  std::shared_ptr<PollerBase> poller_;
-
-  PollerBase *poller() { return poller_.get(); }
-
   template <typename T> struct OnceAwaiter {
     std::function<T()> func_;
     bool await_ready() { return false; }
@@ -206,7 +199,7 @@ private:
       auto ret = co_await OnceAwaiter<detail::system_call_value<Ret>>{func};
       spdlog::debug("async_r: {} {} {}", fd(), ret.what(), ret.raw_value());
       if (!ret.is_nonblocking_error()) {
-        poller_->update_fd(fd(), PollEvent::read_write_remove(), {});
+        PollerBase::get().update_fd(fd(), PollEvent::read_write_remove(), {});
         co_return ret;
       }
     }

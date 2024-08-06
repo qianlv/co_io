@@ -9,12 +9,11 @@ using namespace co_io;
 
 bool is_exit = false;
 
-TaskVoid echo(std::string_view ip, std::string_view port,
-          std::shared_ptr<PollerBase> poller) {
-  AsyncFile stdin_file{STDIN_FILENO, poller};
+TaskVoid echo(std::string_view ip, std::string_view port) {
+  AsyncFile stdin_file{STDIN_FILENO};
   AddressSolver solver{ip, port};
   AddressSolver::AddressInfo info = solver.get_address_info();
-  AsyncFile async_file{info.create_socket(), poller};
+  AsyncFile async_file{info.create_socket()};
   auto r = (co_await async_file.async_connect<int>(info.get_address())).execption("async_connect");
 
   spdlog::debug("connected {}", r);
@@ -39,12 +38,12 @@ int main(int argc, char *argv[]) {
   }
   spdlog::set_level(spdlog::level::debug);
 
-  std::shared_ptr<PollerBase> poller = std::make_shared<SelectPoller>();
+  SelectPoller poller;
 
-  echo(argv[1], argv[2], poller);
+  echo(argv[1], argv[2]);
 
   while (!is_exit) {
-    poller->poll();
+    poller.poll();
   }
   return 0;
 }
