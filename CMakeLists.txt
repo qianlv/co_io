@@ -24,11 +24,16 @@ add_compile_options(-Wall -Wextra -Wpedantic -Werror -Werror=uninitialized
       -Wcast-align
       -Wdouble-promotion)
 
-find_package(fmt CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 
 file(GLOB SOURCES "src/*.cpp")
 add_library(co_io STATIC ${SOURCES})
-target_link_libraries(co_io fmt::fmt)
+target_link_libraries(co_io spdlog::spdlog spdlog::spdlog_header_only)
 
 add_executable(echo_server "examples/echo_server.cpp")
 target_link_libraries(echo_server co_io)
+target_include_directories(echo_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(echo_client "examples/echo_client.cpp")
+target_link_libraries(echo_client co_io)
+target_include_directories(echo_client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

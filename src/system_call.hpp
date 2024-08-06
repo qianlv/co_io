@@ -1,7 +1,11 @@
 #pragma once
 
+#include <cstring>
 #include <sys/types.h>
 #include <system_error>
+
+namespace co_io {
+namespace detail {
 
 template <typename T> class system_call_value {
 public:
@@ -11,11 +15,7 @@ public:
     }
   }
 
-  system_call_value(const system_call_value &) = delete;
-  system_call_value(system_call_value &&) = delete;
-  system_call_value &operator=(const system_call_value &) = delete;
-  system_call_value &operator=(system_call_value &&) = delete;
-
+  system_call_value() = default;
   ~system_call_value() = default;
 
   T value() const {
@@ -25,11 +25,13 @@ public:
     return value_;
   }
 
+  T raw_value() const { return value_; }
+
   operator T() const { return value(); }
 
-  bool is_error() const { return errno_ != 0; }
+  bool is_error() const noexcept { return value_ < 0 && errno_ != 0; }
 
-  T execption(const char* what) const {
+  T execption(const char *what) const {
     if (errno_ != 0) {
       throw std::system_error(errno_, std::system_category(), what);
     }
@@ -37,12 +39,22 @@ public:
     return value_;
   }
 
+  bool is_nonblocking_error() const noexcept {
+    return value_ < 0 &&
+           (errno_ == EAGAIN || errno_ == EINTR || errno_ == EINPROGRESS || errno_ == EWOULDBLOCK);
+  }
+
+  const char* what() const noexcept { return strerror(errno_); }
 
 private:
-  T value_;
+  T value_{};
   int errno_ = 0;
 };
 
 template <typename T> system_call_value<T> system_call(T syscall) {
   return system_call_value<T>(syscall);
 }
+
+} // namespace detail
+
+} // namespace co_io
