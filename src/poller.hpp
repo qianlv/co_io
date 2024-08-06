@@ -2,6 +2,7 @@
 
 #include <coroutine>
 #include <spdlog/spdlog.h>
+#include <sys/epoll.h>
 #include <sys/select.h>
 #include <unordered_map>
 
@@ -60,14 +61,16 @@ public:
   virtual void update_fd(int fd, PollEvent event,
                          std::coroutine_handle<> handle) = 0;
 
+  virtual void unregister_fd(int fd) = 0;
+
   virtual void poll() = 0;
 
   virtual ~PollerBase() = default;
 };
 
-class SelectPolloer : public PollerBase {
+class SelectPoller : public PollerBase {
 public:
-  SelectPolloer() {
+  SelectPoller() {
     FD_ZERO(&read_set_);
     FD_ZERO(&write_set_);
   }
@@ -109,13 +112,17 @@ public:
     }
   }
 
+  void unregister_fd(int fd) override {
+    update_fd(fd, PollEvent::read_write_remove(), std::coroutine_handle<>{});
+  }
+
   void poll() override {
     spdlog::debug("poll... {} {}", events_.size(), max_fd_);
 
     fd_set read_set{read_set_}, write_set{write_set_};
 
-    int n = detail::system_call(
-                pselect(max_fd_ + 1, &read_set, &write_set, nullptr, nullptr, nullptr))
+    int n = detail::system_call(pselect(max_fd_ + 1, &read_set, &write_set,
+                                        nullptr, nullptr, nullptr))
                 .execption("select");
 
     spdlog::debug("select return: {}", n);
@@ -151,6 +158,59 @@ private:
   fd_set write_set_;
   int max_fd_ = 0;
   std::unordered_map<int, PollerEvent> events_;
+};
+
+class EPollPoller : public PollerBase {
+public:
+  EPollPoller()
+      : epoll_fd_(detail::system_call_value(epoll_create1(0))
+                      .execption("epoll_create1")) {}
+  ~EPollPoller() { ::close(epoll_fd_); }
+
+  void register_fd(int fd) override {
+    struct epoll_event ev;
+    ev.events = EPOLLET;
+    ev.data.ptr = nullptr;
+    detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev))
+        .execption("epoll_ctl register_fd");
+  }
+
+  void update_fd(int fd, PollEvent event,
+                 std::coroutine_handle<> handle) override {
+    struct epoll_event ev;
+    ev.events = EPOLLERR | EPOLLET | EPOLLONESHOT;
+    if (event & PollEvent::read()) {
+      ev.events |= EPOLLIN;
+    }
+    if (event & PollEvent::write()) {
+      ev.events |= EPOLLOUT;
+    }
+    ev.data.ptr = handle.address();
+
+    detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
+        .execption("epoll_ctl update read or remove");
+  }
+
+  void unregister_fd(int fd) override {
+    detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr))
+        .execption("epoll_ctl unregister_fd");
+  }
+
+  void poll() override {
+    spdlog::debug("poll...");
+    std::array<struct epoll_event, 128> events;
+    int n = detail::system_call(epoll_pwait2(epoll_fd_, events.data(),
+                                             events.size(), nullptr, nullptr))
+                .execption("epoll_wait");
+    for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
+      auto &ev = events[i];
+      auto handle = std::coroutine_handle<>::from_address(ev.data.ptr);
+      handle.resume();
+    }
+  }
+
+private:
+  int epoll_fd_;
 };
 
 } // namespace co_io

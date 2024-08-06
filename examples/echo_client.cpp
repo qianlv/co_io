@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
   }
   spdlog::set_level(spdlog::level::debug);
 
-  std::shared_ptr<PollerBase> poller = std::make_shared<SelectPolloer>();
+  std::shared_ptr<PollerBase> poller = std::make_shared<SelectPoller>();
 
   echo(argv[1], argv[2], poller);
 

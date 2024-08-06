@@ -182,7 +182,7 @@ public:
   ~AsyncFile() {
     spdlog::debug("desctructor: {}", fd());
     if (fd() != -1) {
-      poller_->update_fd(fd(), PollEvent::read_write_remove(), {});
+      poller_->unregister_fd(fd());
     }
   }
 

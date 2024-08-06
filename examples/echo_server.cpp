@@ -38,7 +38,8 @@ int main(int argc, char *argv[]) {
   (void)argv;
 
   spdlog::set_level(spdlog::level::debug);
-  std::shared_ptr<PollerBase> poller = std::make_shared<SelectPolloer>();
+  std::shared_ptr<PollerBase> poller = std::make_shared<SelectPoller>();
+  // std::shared_ptr<PollerBase> poller = std::make_shared<EPollPoller>();
 
   AddressSolver solver{"localhost", "12345"};
   AddressSolver::AddressInfo info = solver.get_address_info();

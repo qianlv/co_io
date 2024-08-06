@@ -61,14 +61,6 @@ public:
 
   T get_return_value() { return handle_.promise().return_value_; }
 
-  void resume() {
-    if (handle_ && !handle_.done()) {
-      handle_.resume();
-    }
-  }
-
-  bool done() { return handle_.done(); }
-
   handle_type get_handle() { return handle_; }
 
   Task(Task&&) = default;
