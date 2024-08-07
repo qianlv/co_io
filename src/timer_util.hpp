@@ -26,4 +26,10 @@ inline Task<void> sleep_for(std::chrono::steady_clock::duration duration) {
   co_await SleepAwaiter(std::chrono::steady_clock::now() + duration);
 }
 
+inline Task<void> delay_run(std::chrono::steady_clock::duration duration,
+                            std::function<void()> func) {
+  co_await sleep_for(duration);
+  func();
+}
+
 } // namespace co_io
