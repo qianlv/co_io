@@ -116,7 +116,7 @@ public:
       return detail::system_call(::read(fd, buf, size));
     });
     PollerBase::get().add_event(fd, PollEvent::read(), task.get_handle());
-    return task;
+    return std::move(task);
   }
 
   template <typename Ret>
@@ -126,7 +126,7 @@ public:
       return detail::system_call(::write(fd, buf, size));
     });
     PollerBase::get().add_event(fd, PollEvent::write(), task.get_handle());
-    return task;
+    return std::move(task);
   }
 
   template <typename Ret>
@@ -137,7 +137,7 @@ public:
       return detail::system_call(::accept(fd, nullptr, nullptr));
     });
     PollerBase::get().add_event(fd, PollEvent::read(), task.get_handle());
-    return task;
+    return std::move(task);
   }
 
   template <typename Ret>
@@ -148,7 +148,7 @@ public:
       return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
     });
     PollerBase::get().add_event(fd, PollEvent::write(), task.get_handle());
-    return task;
+    return std::move(task);
   }
 
   static AsyncFile bind(AddressSolver::AddressInfo const &addr) {

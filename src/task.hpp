@@ -19,30 +19,58 @@ struct PreviousAwaiter {
   void await_resume() const noexcept {}
 };
 
-template <typename T> class Task {
-public:
-  struct Promise;
-  using promise_type = Promise;
-  using handle_type = std::coroutine_handle<promise_type>;
+template <typename T> class Task;
 
-  struct Promise {
-    std::exception_ptr exception_;
-    T return_value_;
-    std::coroutine_handle<> previous_handle_;
+template <typename T> struct Promise {
+  std::exception_ptr exception_;
+  T return_value_;
+  std::coroutine_handle<> previous_handle_;
+  using handle_type = std::coroutine_handle<Promise>;
 
-    Task get_return_object() { return {handle_type::from_promise(*this)}; }
+  handle_type get_return_object() { return handle_type::from_promise(*this); }
 
-    std::suspend_never initial_suspend() { return {}; }
+  std::suspend_never initial_suspend() { return {}; }
 
-    PreviousAwaiter final_suspend() noexcept { return {previous_handle_}; }
+  PreviousAwaiter final_suspend() noexcept { return {previous_handle_}; }
 
-    void return_value(T value) noexcept { return_value_ = std::move(value); }
+  void return_value(T value) noexcept { return_value_ = std::move(value); }
 
-    void unhandled_exception() {
-      exception_ = std::current_exception();
+  void unhandled_exception() { exception_ = std::current_exception(); }
+
+  T result() {
+    if (exception_) {
       std::rethrow_exception(exception_);
     }
-  };
+    return std::move(return_value_);
+  }
+};
+
+template <> struct Promise<void> {
+  std::exception_ptr exception_;
+  std::coroutine_handle<> previous_handle_;
+  using handle_type = std::coroutine_handle<Promise>;
+
+  handle_type get_return_object() { return handle_type::from_promise(*this); }
+
+  std::suspend_never initial_suspend() { return {}; }
+
+  PreviousAwaiter final_suspend() noexcept { return {previous_handle_}; }
+
+  void return_void() noexcept {}
+
+  void unhandled_exception() { exception_ = std::current_exception(); }
+
+  void result() {
+    if (exception_) [[unlikely]] {
+      std::rethrow_exception(exception_);
+    }
+  }
+};
+
+template <typename T = void> class Task {
+public:
+  using promise_type = Promise<T>;
+  using handle_type = promise_type::handle_type;
 
   struct Awaiter {
     handle_type handle_;
@@ -53,20 +81,23 @@ public:
       handle_.promise().previous_handle_ = handle;
     }
 
-    T await_resume() { return handle_.promise().return_value_; }
+    T await_resume() { return handle_.promise().result(); }
   };
 
   Awaiter operator co_await() { return {handle_}; }
 
-  T get_return_value() { return handle_.promise().return_value_; }
-
   handle_type get_handle() { return handle_; }
 
-  Task(Task&&) = default;
-  Task& operator=(Task&&) = default;
+  Task(handle_type handle) : handle_(handle) {
+  }
+  Task(Task &&other) : handle_(other.handle_) {
+    other.handle_ = nullptr;
+  }
+  Task &operator=(Task &&other) { std::swap(other.handle_, handle_); }
 
-  ~Task() { 
-    if (handle_) {
+  ~Task() {
+    if (handle_ && handle_.done()) {
+      spdlog::debug("desctructor: {}", handle_.address());
       handle_.destroy();
     }
   }
@@ -74,30 +105,7 @@ public:
 private:
   handle_type handle_;
 
-  Task(const handle_type &handle) : handle_(handle) {}
-  Task(const Task &) = delete;
-  Task &operator=(const Task &) = delete;
-};
-
-class TaskVoid {
-public:
-  struct Promise;
-  using promise_type = Promise;
-  using handle_type = std::coroutine_handle<promise_type>;
-
-  struct Promise {
-    std::exception_ptr exception_;
-    std::coroutine_handle<> previous_handle_;
-
-    TaskVoid get_return_object() { return {}; }
-
-    std::suspend_never initial_suspend() { return {}; }
-    std::suspend_never final_suspend() noexcept { return {}; }
-
-    void unhandled_exception() {
-      spdlog::debug("taskvoid unhandled exception");
-      exception_ = std::current_exception();
-      std::rethrow_exception(exception_);
-    }
-  };
+  // Task(Task &&other) = delete;
+  Task(Task const &) = delete;
+  Task &operator=(Task const &) = delete;
 };
