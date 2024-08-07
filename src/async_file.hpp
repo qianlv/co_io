@@ -4,7 +4,6 @@
 #include <cstring>
 #include <fcntl.h>
 #include <functional>
-#include <memory>
 #include <netdb.h>
 #include <spdlog/spdlog.h>
 #include <sys/socket.h>
@@ -105,7 +104,7 @@ public:
     auto flags = detail::system_call(fcntl(fd, F_GETFL)).execption("fcntl");
     detail::system_call(fcntl(fd, F_SETFL, flags | O_NONBLOCK))
         .execption("fcntl");
-    PollerBase::get().register_fd(fd);
+    PollerBase::instance().register_fd(fd);
   }
 
   template <typename Ret>
@@ -115,7 +114,7 @@ public:
       spdlog::debug("async_read: {}", fd);
       return detail::system_call(::read(fd, buf, size));
     });
-    PollerBase::get().add_event(fd, PollEvent::read(), task.get_handle());
+    PollerBase::instance().add_event(fd, PollEvent::read(), task.get_handle());
     return std::move(task);
   }
 
@@ -125,7 +124,7 @@ public:
     auto task = async_r<ssize_t>([fd, buf, size]() {
       return detail::system_call(::write(fd, buf, size));
     });
-    PollerBase::get().add_event(fd, PollEvent::write(), task.get_handle());
+    PollerBase::instance().add_event(fd, PollEvent::write(), task.get_handle());
     return std::move(task);
   }
 
@@ -136,7 +135,7 @@ public:
       spdlog::debug("async_accept: {}", fd);
       return detail::system_call(::accept(fd, nullptr, nullptr));
     });
-    PollerBase::get().add_event(fd, PollEvent::read(), task.get_handle());
+    PollerBase::instance().add_event(fd, PollEvent::read(), task.get_handle());
     return std::move(task);
   }
 
@@ -147,7 +146,7 @@ public:
     auto task = async_r<int>([fd, &addr]() {
       return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
     });
-    PollerBase::get().add_event(fd, PollEvent::write(), task.get_handle());
+    PollerBase::instance().add_event(fd, PollEvent::write(), task.get_handle());
     return std::move(task);
   }
 
@@ -177,7 +176,7 @@ public:
   ~AsyncFile() {
     spdlog::debug("desctructor: {}", fd());
     if (fd() != -1) {
-      PollerBase::get().unregister_fd(fd());
+      PollerBase::instance().unregister_fd(fd());
     }
   }
 
@@ -198,7 +197,7 @@ private:
       auto ret = co_await onceAwaiter;
       // spdlog::debug("async_r: {} {} {}", fd(), ret.what(), ret.raw_value());
       if (!ret.is_nonblocking_error()) {
-        PollerBase::get().remove_event(fd(), PollEvent::read_write());
+        PollerBase::instance().remove_event(fd(), PollEvent::read_write());
         co_return ret;
       }
     }

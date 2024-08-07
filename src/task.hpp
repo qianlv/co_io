@@ -3,6 +3,7 @@
 #include <coroutine>
 #include <spdlog/spdlog.h>
 
+namespace co_io {
 struct PreviousAwaiter {
   std::coroutine_handle<> mPrevious;
 
@@ -17,6 +18,12 @@ struct PreviousAwaiter {
   }
 
   void await_resume() const noexcept {}
+};
+
+struct SupsendAwaiter {
+  bool await_ready() const noexcept { return false; }
+  void await_suspend(std::coroutine_handle<>) const noexcept {}
+  void await_resume() const {}
 };
 
 template <typename T> class Task;
@@ -88,12 +95,14 @@ public:
 
   handle_type get_handle() { return handle_; }
 
-  Task(handle_type handle) : handle_(handle) {
+  Task(handle_type handle) : handle_(handle) {}
+  Task(Task &&other) : handle_(other.handle_) { other.handle_ = nullptr; }
+  Task &operator=(Task &&other) {
+    std::swap(other.handle_, handle_);
+    return *this;
   }
-  Task(Task &&other) : handle_(other.handle_) {
-    other.handle_ = nullptr;
-  }
-  Task &operator=(Task &&other) { std::swap(other.handle_, handle_); }
+
+  Task() = default;
 
   ~Task() {
     if (handle_ && handle_.done()) {
@@ -109,3 +118,5 @@ private:
   Task(Task const &) = delete;
   Task &operator=(Task const &) = delete;
 };
+
+} // namespace co_io

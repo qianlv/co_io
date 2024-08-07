@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "system_call.hpp"
+#include "timer_context.hpp"
 
 namespace co_io {
 
@@ -45,7 +46,7 @@ public:
 
 class PollerBase {
 public:
-  PollerBase() { instance = this; }
+  PollerBase() { g_instance = this; }
 
   struct PollerEvent {
     int fd;
@@ -62,11 +63,28 @@ public:
 
   virtual void poll() = 0;
 
-  virtual ~PollerBase() { instance = nullptr; }
+  void add_timer(std::chrono::steady_clock::time_point expired_time,
+                 std::coroutine_handle<> coroutine) {
+    timer_context_.add_timer(expired_time, coroutine);
+  }
 
-  static inline thread_local PollerBase *instance = nullptr;
+  void add_timer(std::chrono::steady_clock::duration duration,
+                 std::coroutine_handle<> coroutine) {
+    timer_context_.add_timer(std::chrono::steady_clock::now() + duration,
+                             coroutine);
+  }
 
-  static PollerBase &get() { return *instance; }
+  virtual ~PollerBase() { g_instance = nullptr; }
+
+  static inline thread_local PollerBase *g_instance = nullptr;
+
+  static PollerBase &instance() {
+    assert(g_instance);
+    return *g_instance;
+  }
+
+protected:
+  TimerContext timer_context_;
 };
 
 class SelectPoller : public PollerBase {
@@ -210,13 +228,10 @@ public:
   void poll() override {
     spdlog::debug("poll...");
     std::array<struct epoll_event, 128> events;
-    // int n = detail::system_call(epoll_pwait2(epoll_fd_, events.data(),
-    //                                          events.size(), nullptr,
-    //                                          nullptr))
-    //             .execption("epoll_wait");
     int n = detail::system_call(epoll_pwait(epoll_fd_, events.data(),
                                             events.size(), -1, nullptr))
                 .execption("epoll_wait");
+    spdlog::debug("epoll_wait return: {}", n);
     for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
       auto &ev = events[i];
       auto handle = std::coroutine_handle<>::from_address(ev.data.ptr);
