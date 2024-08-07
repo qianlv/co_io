@@ -9,24 +9,32 @@ using namespace co_io;
 
 bool is_exit = false;
 
-TaskVoid echo(std::string_view ip, std::string_view port) {
+Task<void> echo(std::string_view ip, std::string_view port) {
   AsyncFile stdin_file{STDIN_FILENO};
   AddressSolver solver{ip, port};
   AddressSolver::AddressInfo info = solver.get_address_info();
   AsyncFile async_file{info.create_socket()};
-  auto r = (co_await async_file.async_connect<int>(info.get_address())).execption("async_connect");
+  auto r = (co_await async_file.async_connect<int>(info.get_address()))
+               .execption("async_connect");
 
   spdlog::debug("connected {}", r);
   std::array<char, 1024> buf;
   while (true) {
-    auto size = (co_await stdin_file.async_read<ssize_t>(buf.data(), buf.size())).value();
+    auto size =
+        (co_await stdin_file.async_read<ssize_t>(buf.data(), buf.size()))
+            .value();
     if (size == 0) {
       spdlog::debug("Read EOF");
       break;
     }
-    (co_await async_file.async_write<ssize_t>(buf.data(), static_cast<size_t>(size))).execption("async_write");
-    size = (co_await async_file.async_read<ssize_t>(buf.data(), buf.size())).execption("async_read");
-    (co_await stdin_file.async_write<ssize_t>(buf.data(), static_cast<size_t>(size))).execption("async_write");
+    (co_await async_file.async_write<ssize_t>(buf.data(),
+                                              static_cast<size_t>(size)))
+        .execption("async_write");
+    size = (co_await async_file.async_read<ssize_t>(buf.data(), buf.size()))
+               .execption("async_read");
+    (co_await stdin_file.async_write<ssize_t>(buf.data(),
+                                              static_cast<size_t>(size)))
+        .execption("async_write");
   }
   is_exit = true;
 }
@@ -42,7 +50,8 @@ int main(int argc, char *argv[]) {
     } else if (argv[i] == std::string("-d")) {
       debug = true;
     } else if (argv[i] == std::string("-h")) {
-      std::cerr << "Usage: " << argv[0] << " [ip] [port] [-d] [-e]" << std::endl;
+      std::cerr << "Usage: " << argv[0] << " [ip] [port] [-d] [-e]"
+                << std::endl;
     } else if (i == 1) {
       ip = argv[i];
     } else if (i == 2) {

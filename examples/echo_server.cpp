@@ -7,7 +7,7 @@
 
 using namespace co_io;
 
-TaskVoid client(AsyncFile async_file) {
+Task<void> client(AsyncFile async_file) {
   char buffer[1024];
   while (true) {
     spdlog::debug("waiting for read");
@@ -23,7 +23,7 @@ TaskVoid client(AsyncFile async_file) {
   spdlog::debug("client exit");
 }
 
-TaskVoid server(AsyncFile &async_file) {
+Task<void> server(AsyncFile &async_file) {
   while (true) {
     AddressSolver::Address addr;
     spdlog::debug("waiting for accept");
@@ -45,7 +45,8 @@ int main(int argc, char *argv[]) {
     } else if (argv[i] == std::string("-d")) {
       debug = true;
     } else if (argv[i] == std::string("-h")) {
-      std::cerr << "Usage: " << argv[0] << " [ip] [port] [-d] [-e]" << std::endl;
+      std::cerr << "Usage: " << argv[0] << " [ip] [port] [-d] [-e]"
+                << std::endl;
     } else if (i == 1) {
       ip = argv[i];
     } else if (i == 2) {
