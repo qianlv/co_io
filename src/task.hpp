@@ -102,12 +102,20 @@ public:
     return *this;
   }
 
+  void reset() {
+    if (handle_) {
+      handle_.destroy();
+      handle_ = nullptr;
+    }
+  }
+
   Task() = default;
 
   ~Task() {
     if (handle_ && handle_.done()) {
       spdlog::debug("desctructor: {}", handle_.address());
       handle_.destroy();
+      handle_ = nullptr;
     }
   }
 

@@ -41,9 +41,9 @@ void TimerContext::reset() {
     register_ = true;
   }
 
-  spdlog::debug("TimerContext::reset() done = {}", poll_done_);
-  if (poll_done_) {
-    poll_done_ = false;
+  // spdlog::debug("TimerContext::reset() done = {}", poll_done_.get_handle);
+  if (is_task_done_) {
+    is_task_done_ = false;
     poll_task_ = poll_timer();
     spdlog::debug("TimerContext::reset() add_event {}",
                   poll_task_.get_handle().address());
@@ -71,7 +71,8 @@ Task<void> TimerContext::poll_timer() {
   }
   spdlog::debug("TimerContext::poll_timer() end");
 
-  poll_done_ = true;
+  poll_done_ = std::move(poll_task_);
+  is_task_done_ = true;
   reset();
   co_return;
 }

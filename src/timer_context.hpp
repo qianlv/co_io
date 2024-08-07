@@ -43,8 +43,9 @@ private:
 
   std::priority_queue<TimerEntry> timers_;
   int clock_fd_;
-  bool poll_done_{true};
   bool register_{false};
+  bool is_task_done_ {true};
+  Task<void> poll_done_;
   Task<void> poll_task_;
 };
 
