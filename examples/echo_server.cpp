@@ -1,3 +1,4 @@
+#include <iostream>
 #include <spdlog/spdlog.h>
 
 #include "async_file.hpp"
@@ -34,12 +35,35 @@ TaskVoid server(AsyncFile &async_file) {
 }
 
 int main(int argc, char *argv[]) {
-  (void)argc;
-  (void)argv;
+  bool epoll = false;
+  bool debug = false;
+  std::string ip = "localhost";
+  std::string port = "12345";
+  for (int i = 1; i < argc; ++i) {
+    if (argv[i] == std::string("-e")) {
+      epoll = true;
+    } else if (argv[i] == std::string("-d")) {
+      debug = true;
+    } else if (argv[i] == std::string("-h")) {
+      std::cerr << "Usage: " << argv[0] << " [ip] [port] [-d] [-e]" << std::endl;
+    } else if (i == 1) {
+      ip = argv[i];
+    } else if (i == 2) {
+      port = argv[i];
+    }
+  }
+  spdlog::info("ip: {}, port: {}", ip, port);
 
-  spdlog::set_level(spdlog::level::debug);
-  EPollPoller poller;
-  // std::shared_ptr<PollerBase> poller = std::make_shared<EPollPoller>();
+  if (debug) {
+    spdlog::set_level(spdlog::level::debug);
+  }
+
+  std::unique_ptr<PollerBase> poller;
+  if (epoll) {
+    poller.reset(new EPollPoller());
+  } else {
+    poller.reset(new SelectPoller());
+  }
 
   AddressSolver solver{"localhost", "12345"};
   AddressSolver::AddressInfo info = solver.get_address_info();
@@ -47,7 +71,7 @@ int main(int argc, char *argv[]) {
 
   server(async_file);
   while (true) {
-    poller.poll();
+    poller->poll();
   }
   return 0;
 }

@@ -32,18 +32,41 @@ TaskVoid echo(std::string_view ip, std::string_view port) {
 }
 
 int main(int argc, char *argv[]) {
-  if (argc != 3) {
-    spdlog::error("Usage: {} ip port", argv[0]);
-    return 1;
+  bool epoll = false;
+  bool debug = false;
+  std::string ip = "localhost";
+  std::string port = "12345";
+  for (int i = 1; i < argc; ++i) {
+    if (argv[i] == std::string("-e")) {
+      epoll = true;
+    } else if (argv[i] == std::string("-d")) {
+      debug = true;
+    } else if (argv[i] == std::string("-h")) {
+      std::cerr << "Usage: " << argv[0] << " [ip] [port] [-d] [-e]" << std::endl;
+    } else if (i == 1) {
+      ip = argv[i];
+    } else if (i == 2) {
+      port = argv[i];
+    }
   }
-  spdlog::set_level(spdlog::level::debug);
 
-  SelectPoller poller;
+  spdlog::info("ip: {}, port: {}", ip, port);
 
-  echo(argv[1], argv[2]);
+  if (debug) {
+    spdlog::set_level(spdlog::level::debug);
+  }
+
+  std::unique_ptr<PollerBase> poller;
+  if (epoll) {
+    poller.reset(new EPollPoller());
+  } else {
+    poller.reset(new SelectPoller());
+  }
+
+  echo(ip, port);
 
   while (!is_exit) {
-    poller.poll();
+    poller->poll();
   }
   return 0;
 }
