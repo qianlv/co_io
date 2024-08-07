@@ -39,11 +39,6 @@ public:
   static constexpr PollEvent read() { return PollEvent(1 << 0); }
   static constexpr PollEvent write() { return PollEvent(1 << 1); }
   static constexpr PollEvent read_write() { return read() | write(); }
-  static constexpr PollEvent read_remove() { return PollEvent(1 << 2); }
-  static constexpr PollEvent write_remove() { return PollEvent(1 << 3); }
-  static constexpr PollEvent read_write_remove() {
-    return read_remove() | write_remove();
-  }
 
   constexpr unsigned int raw() const { return event; }
 };
@@ -59,11 +54,11 @@ public:
   };
 
   virtual void register_fd(int fd) = 0;
-
-  virtual void update_fd(int fd, PollEvent event,
-                         std::coroutine_handle<> handle) = 0;
-
   virtual void unregister_fd(int fd) = 0;
+
+  virtual void add_event(int fd, PollEvent event,
+                         std::coroutine_handle<> handle) = 0;
+  virtual void remove_event(int fd, PollEvent event) = 0;
 
   virtual void poll() = 0;
 
@@ -83,43 +78,42 @@ public:
 
   void register_fd(int) override { ; }
 
-  void update_fd(int fd, PollEvent event,
+  void add_event(int fd, PollEvent event,
                  std::coroutine_handle<> handle) override {
     spdlog::debug("update fd: {}, event: {}, handle: {}", fd, event.raw(),
                   handle.address());
-    auto it = events_.find(fd);
-    if ((event & PollEvent::read()) || (event & PollEvent::write())) {
-      if (it == events_.end()) {
-        events_.emplace_hint(
-            it, fd, PollerEvent{.fd = fd, .event = event, .handle = handle});
-      } else {
-        it->second.event = it->second.event | event;
-        it->second.handle = handle;
-      }
-
-      if (event & PollEvent::read()) {
-        FD_SET(fd, &read_set_);
-      }
-      if (event & PollEvent::write()) {
-        FD_SET(fd, &write_set_);
-      }
+    if (auto it = events_.find(fd); it != events_.end()) {
+      it->second.event = it->second.event | event;
+      it->second.handle = handle;
+    } else {
+      events_.emplace_hint(
+          it, fd, PollerEvent{.fd = fd, .event = event, .handle = handle});
       max_fd_ = std::max(max_fd_, fd);
-    } else if (it != events_.end()) {
-      if (event & PollEvent::read_remove()) {
-        spdlog::debug("read_remove: {}", it->second.event.raw());
-        it->second.event = it->second.event & (~PollEvent::read());
+    }
+
+    if (event & PollEvent::read()) {
+      FD_SET(fd, &read_set_);
+    }
+    if (event & PollEvent::write()) {
+      FD_SET(fd, &write_set_);
+    }
+  }
+
+  void remove_event(int fd, PollEvent event) override {
+    spdlog::debug("remove fd: {}, event: {}", fd, event.raw());
+    if (auto it = events_.find(fd); it != events_.end()) {
+      it->second.event = it->second.event & (~event);
+      if (event & PollEvent::read()) {
         FD_CLR(fd, &read_set_);
       }
-      if (event & PollEvent::write_remove()) {
-        spdlog::debug("write_remove: {}", it->second.event.raw());
-        it->second.event = it->second.event & (~PollEvent::write());
+      if (event & PollEvent::write()) {
         FD_CLR(fd, &write_set_);
       }
     }
   }
 
   void unregister_fd(int fd) override {
-    update_fd(fd, PollEvent::read_write_remove(), std::coroutine_handle<>{});
+    remove_event(fd, PollEvent::read_write());
   }
 
   void poll() override {
@@ -175,16 +169,18 @@ public:
 
   void register_fd(int fd) override {
     struct epoll_event ev;
-    ev.events = EPOLLET;
+    ev.events = 0;
     ev.data.ptr = nullptr;
     detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev))
         .execption("epoll_ctl register_fd");
   }
 
-  void update_fd(int fd, PollEvent event,
+  void add_event(int fd, PollEvent event,
                  std::coroutine_handle<> handle) override {
+    spdlog::debug("update fd: {}, event: {}, handle: {}", fd, event.raw(),
+                  handle.address());
     struct epoll_event ev;
-    ev.events = EPOLLERR | EPOLLET | EPOLLONESHOT;
+    ev.events = EPOLLERR | EPOLLET;
     if (event & PollEvent::read()) {
       ev.events |= EPOLLIN;
     }
@@ -194,7 +190,16 @@ public:
     ev.data.ptr = handle.address();
 
     detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
-        .execption("epoll_ctl update read or remove");
+        .execption("epoll_ctl add_event");
+  }
+
+  void remove_event(int fd, PollEvent event) override {
+    spdlog::debug("remove fd: {}, event: {}", fd, event.raw());
+    struct epoll_event ev;
+    ev.events = 0;
+    ev.data.ptr = nullptr;
+    detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
+        .execption("epoll_ctl remove_event");
   }
 
   void unregister_fd(int fd) override {
@@ -209,8 +214,8 @@ public:
     //                                          events.size(), nullptr,
     //                                          nullptr))
     //             .execption("epoll_wait");
-    int n = detail::system_call(
-                epoll_pwait(epoll_fd_, events.data(), events.size(), -1, nullptr))
+    int n = detail::system_call(epoll_pwait(epoll_fd_, events.data(),
+                                            events.size(), -1, nullptr))
                 .execption("epoll_wait");
     for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
       auto &ev = events[i];

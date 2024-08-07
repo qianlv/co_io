@@ -101,8 +101,7 @@ struct AddressSolver {
 
 class AsyncFile : public FileDescriptor {
 public:
-  explicit AsyncFile(int fd)
-      : FileDescriptor(fd) {
+  explicit AsyncFile(int fd) : FileDescriptor(fd) {
     auto flags = detail::system_call(fcntl(fd, F_GETFL)).execption("fcntl");
     detail::system_call(fcntl(fd, F_SETFL, flags | O_NONBLOCK))
         .execption("fcntl");
@@ -116,7 +115,7 @@ public:
       spdlog::debug("async_read: {}", fd);
       return detail::system_call(::read(fd, buf, size));
     });
-    PollerBase::get().update_fd(fd, PollEvent::read(), task.get_handle());
+    PollerBase::get().add_event(fd, PollEvent::read(), task.get_handle());
     return task;
   }
 
@@ -126,19 +125,18 @@ public:
     auto task = async_r<ssize_t>([fd, buf, size]() {
       return detail::system_call(::write(fd, buf, size));
     });
-    PollerBase::get().update_fd(fd, PollEvent::write(), task.get_handle());
+    PollerBase::get().add_event(fd, PollEvent::write(), task.get_handle());
     return task;
   }
 
   template <typename Ret>
-  Task<detail::system_call_value<Ret>>
-  async_accept(AddressSolver::Address &) {
+  Task<detail::system_call_value<Ret>> async_accept(AddressSolver::Address &) {
     int fd = this->fd();
     auto task = async_r<int>([fd]() {
       spdlog::debug("async_accept: {}", fd);
       return detail::system_call(::accept(fd, nullptr, nullptr));
     });
-    PollerBase::get().update_fd(fd, PollEvent::read(), task.get_handle());
+    PollerBase::get().add_event(fd, PollEvent::read(), task.get_handle());
     return task;
   }
 
@@ -149,7 +147,7 @@ public:
     auto task = async_r<int>([fd, &addr]() {
       return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
     });
-    PollerBase::get().update_fd(fd, PollEvent::write(), task.get_handle());
+    PollerBase::get().add_event(fd, PollEvent::write(), task.get_handle());
     return task;
   }
 
@@ -185,21 +183,22 @@ public:
 
 private:
   template <typename T> struct OnceAwaiter {
-    std::function<T()> func_;
-    bool await_ready() { return false; }
-    void await_suspend(std::coroutine_handle<>) {
-    }
-    T await_resume() { return func_(); }
+    std::function<detail::system_call_value<T>()> func_;
+
+    bool await_ready() const noexcept { return false; }
+    void await_suspend(std::coroutine_handle<>) const noexcept {}
+    detail::system_call_value<T> await_resume() const { return func_(); }
   };
 
   template <typename Ret>
   Task<detail::system_call_value<Ret>>
   async_r(std::function<detail::system_call_value<Ret>()> func) {
+    auto onceAwaiter = OnceAwaiter<Ret>{std::move(func)};
     while (true) {
-      auto ret = co_await OnceAwaiter<detail::system_call_value<Ret>>{func};
-      spdlog::debug("async_r: {} {} {}", fd(), ret.what(), ret.raw_value());
+      auto ret = co_await onceAwaiter;
+      // spdlog::debug("async_r: {} {} {}", fd(), ret.what(), ret.raw_value());
       if (!ret.is_nonblocking_error()) {
-        PollerBase::get().update_fd(fd(), PollEvent::read_write_remove(), {});
+        PollerBase::get().remove_event(fd(), PollEvent::read_write());
         co_return ret;
       }
     }

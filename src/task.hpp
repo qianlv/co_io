@@ -49,7 +49,7 @@ public:
 
     bool await_ready() { return false; }
 
-    void await_suspend(std::coroutine_handle<> handle) {
+    auto await_suspend(std::coroutine_handle<> handle) {
       handle_.promise().previous_handle_ = handle;
     }
 
