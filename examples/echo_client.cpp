@@ -7,6 +7,8 @@
 using namespace co_io;
 
 TaskNoSuspend<void> echo(std::string_view ip, std::string_view port,
+                         std::shared_ptr<LoopBase> loop);
+TaskNoSuspend<void> echo(std::string_view ip, std::string_view port,
                          std::shared_ptr<LoopBase> loop) {
   auto poller = loop->poller();
   AsyncFile stdin_file{STDIN_FILENO, poller};

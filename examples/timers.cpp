@@ -11,6 +11,7 @@ int count = 0;
 int n = 1;
 
 std::unique_ptr<LoopBase> loop;
+TaskNoSuspend<void> pause_echo(int i);
 
 TaskNoSuspend<void> pause_echo(int i) {
   spdlog::info("pause start");

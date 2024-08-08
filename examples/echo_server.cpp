@@ -8,6 +8,8 @@
 using namespace co_io;
 
 std::unique_ptr<LoopBase> loop;
+TaskNoSuspend<void> client(AsyncFile async_file);
+TaskNoSuspend<void> server(AsyncFile &async_file, PollerBasePtr poller);
 
 TaskNoSuspend<void> client(AsyncFile async_file) {
   char buffer[512];
