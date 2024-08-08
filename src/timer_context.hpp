@@ -1,31 +1,41 @@
 #pragma once
+
 #include <chrono>
 #include <coroutine>
 #include <fcntl.h>
 #include <queue>
 #include <sys/timerfd.h>
 
+#include "async_file.hpp"
+#include "poller.hpp"
 #include "system_call.hpp"
 #include "task.hpp"
 
 namespace co_io {
 
-class TimerContext {
+class TimerContext;
+using TimerContextPtr = std::shared_ptr<TimerContext>;
+
+class TimerContext : public std::enable_shared_from_this<TimerContext> {
+  struct SleepAwaiter;
+
 public:
-  TimerContext()
+  TimerContext(PollerBasePtr poller)
       : clock_fd_(
             detail::system_call_value<int>(::timerfd_create(CLOCK_MONOTONIC, 0))
-                .execption("timerfd_create")) {
-    auto flags =
-        detail::system_call(fcntl(clock_fd_, F_GETFL)).execption("fcntl");
-    detail::system_call(fcntl(clock_fd_, F_SETFL, flags | O_NONBLOCK))
-        .execption("fcntl");
+                .execption("timerfd_create"),
+            poller),
+        poller_(poller) {
+    poll_timer();
   }
 
   void add_timer(std::chrono::steady_clock::time_point expired_time,
                  std::coroutine_handle<> coroutine);
 
-  int fd() const { return clock_fd_; }
+  SleepAwaiter sleep_until(std::chrono::steady_clock::time_point expireTime);
+  SleepAwaiter sleep_for(std::chrono::steady_clock::duration duration);
+  TaskNoSuspend<void> delay_run(std::chrono::steady_clock::duration duration,
+                                std::function<void()> func);
 
 private:
   struct TimerEntry {
@@ -37,16 +47,24 @@ private:
     }
   };
 
+  struct SleepAwaiter {
+    bool await_ready() const noexcept { return false; }
+    void await_suspend(std::coroutine_handle<> handle_) const noexcept {
+      timer_context->add_timer(expired_time, handle_);
+    }
+    void await_resume() const noexcept { return; }
+
+    std::chrono::steady_clock::time_point expired_time;
+    TimerContextPtr timer_context;
+  };
+
   void reset();
 
-  Task<void> poll_timer();
+  TaskNoSuspend<void> poll_timer();
 
   std::priority_queue<TimerEntry> timers_;
-  int clock_fd_;
-  bool register_{false};
-  bool is_task_done_ {true};
-  Task<void> poll_done_;
-  Task<void> poll_task_;
+  AsyncFile clock_fd_;
+  PollerBasePtr poller_;
 };
 
 } // namespace co_io

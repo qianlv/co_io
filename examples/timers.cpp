@@ -1,21 +1,23 @@
 #include <iostream>
 #include <spdlog/spdlog.h>
 
+#include "loop.hpp"
 #include "poller.hpp"
-#include "timer_util.hpp"
+#include "task.hpp"
 
 using namespace co_io;
 
 int count = 0;
 int n = 1;
 
-Task<void> pause_echo(int i) {
+std::unique_ptr<LoopBase> loop;
+
+TaskNoSuspend<void> pause_echo(int i) {
   spdlog::info("pause start");
-  co_await sleep_for(std::chrono::seconds(i));
+  co_await loop->timer()->sleep_for(std::chrono::seconds(i));
   spdlog::info("pause end");
   count += 1;
 }
-
 
 int main(int argc, char *argv[]) {
   EPollPoller poller;
@@ -26,14 +28,18 @@ int main(int argc, char *argv[]) {
 
   spdlog::set_level(spdlog::level::debug);
 
-  std::vector<Task<void>> tasks;
+  loop.reset(new EPollLoop());
+
   for (int i = 0; i < n; i++) {
-    tasks.push_back(pause_echo(i + 1));
+    pause_echo(i);
   }
 
-  while (count < n) {
-    poller.poll();
-  }
+  loop->timer()->delay_run(std::chrono::seconds(n), []() {
+    spdlog::info("delay run");
+    pause_echo(1);
+  });
+
+  loop->run();
 
   spdlog::debug("pause echo {} done", count);
   return 0;

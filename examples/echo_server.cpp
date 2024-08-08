@@ -1,42 +1,39 @@
-#include <iostream>
-#include <spdlog/spdlog.h>
-
 #include "async_file.hpp"
+#include "loop.hpp"
 #include "poller.hpp"
 #include "task.hpp"
 
+#include <iostream>
+
 using namespace co_io;
 
-Task<void> client(AsyncFile async_file) {
-  char buffer[1024];
+std::unique_ptr<LoopBase> loop;
+
+TaskNoSuspend<void> client(AsyncFile async_file) {
+  char buffer[512];
   while (true) {
-    spdlog::debug("waiting for read");
-    auto t = co_await async_file.async_read<ssize_t>(buffer, 1024);
+    auto t = co_await async_file.async_read(buffer, 512);
     auto size = t.value();
     if (size == 0) {
-      spdlog::debug("Read EOF");
       break;
     }
-    spdlog::debug("Read: {} bytes", size);
-    co_await async_file.async_write<ssize_t>(buffer, static_cast<size_t>(size));
+    co_await async_file.async_write(buffer, static_cast<size_t>(size));
   }
-  spdlog::debug("client exit");
 }
 
-Task<void> server(AsyncFile &async_file) {
+TaskNoSuspend<void> server(AsyncFile &async_file, PollerBasePtr poller) {
   while (true) {
     AddressSolver::Address addr;
-    spdlog::debug("waiting for accept");
-    auto t = co_await async_file.async_accept<int>(addr);
+    auto t = co_await async_file.async_accept(addr);
     int fd = t.value();
-    spdlog::debug("new connection: {}", fd);
-    client(AsyncFile{fd});
+    client(AsyncFile{fd, poller});
   }
 }
 
 int main(int argc, char *argv[]) {
   bool epoll = false;
   bool debug = false;
+  size_t count = 0;
   std::string ip = "localhost";
   std::string port = "12345";
   for (int i = 1; i < argc; ++i) {
@@ -47,32 +44,29 @@ int main(int argc, char *argv[]) {
     } else if (argv[i] == std::string("-h")) {
       std::cerr << "Usage: " << argv[0] << " [ip] [port] [-d] [-e]"
                 << std::endl;
+    } else if (argv[i] == std::string("-c") && i + 1 < argc) {
+      count = static_cast<size_t>(atol(argv[++i]));
     } else if (i == 1) {
       ip = argv[i];
     } else if (i == 2) {
       port = argv[i];
     }
   }
-  spdlog::info("ip: {}, port: {}", ip, port);
 
   if (debug) {
-    spdlog::set_level(spdlog::level::debug);
   }
 
-  std::unique_ptr<PollerBase> poller;
   if (epoll) {
-    poller.reset(new EPollPoller());
+    loop.reset(new EPollLoop(count));
   } else {
-    poller.reset(new SelectPoller());
+    loop.reset(new SelectLoop(count));
   }
 
   AddressSolver solver{"localhost", "12345"};
   AddressSolver::AddressInfo info = solver.get_address_info();
-  AsyncFile async_file = AsyncFile::bind(info);
+  AsyncFile async_file = AsyncFile::bind(info, loop->poller());
 
-  server(async_file);
-  while (true) {
-    poller->poll();
-  }
+  server(async_file, loop->poller());
+  loop->run();
   return 0;
 }

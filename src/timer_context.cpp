@@ -1,6 +1,6 @@
 #include "timer_context.hpp"
-#include "poller.hpp"
-#include <spdlog/spdlog.h>
+#include "task.hpp"
+#include <iostream>
 
 namespace co_io {
 
@@ -19,62 +19,55 @@ void TimerContext::reset() {
     return;
   }
 
-  spdlog::debug("TimerContext::reset() {}", timers_.size());
   struct itimerspec new_value;
   auto top = timers_.top();
   std::chrono::nanoseconds nanos =
       top.expired_time - std::chrono::steady_clock::now();
-  new_value.it_value.tv_sec = nanos.count() / 1000'000'000l;
-  new_value.it_value.tv_nsec = nanos.count() % 1000'000'000l;
+  auto count = nanos.count();
+  if (count < 0) { // just set 1 nanosecond to trigger
+    count = 1;
+  }
+
+  new_value.it_value.tv_sec = count / 1000'000'000l;
+  new_value.it_value.tv_nsec = count % 1000'000'000l;
   new_value.it_interval.tv_sec = 0;
   new_value.it_interval.tv_nsec = 0;
 
-  spdlog::debug("TimerContext::reset() timer {} {}", new_value.it_value.tv_sec,
-                new_value.it_value.tv_nsec);
-
   detail::system_call_value<int>(
-      ::timerfd_settime(clock_fd_, 0, &new_value, nullptr))
+      ::timerfd_settime(clock_fd_.fd(), 0, &new_value, nullptr))
       .execption("timerfd_settime");
+}
 
-  if (!register_) {
-    PollerBase::instance().register_fd(fd());
-    register_ = true;
-  }
+TaskNoSuspend<void> TimerContext::poll_timer() {
+  while (true) {
+    uint64_t exp = 0;
+    co_await clock_fd_.async_read(reinterpret_cast<void *>(&exp), sizeof(exp));
 
-  // spdlog::debug("TimerContext::reset() done = {}", poll_done_.get_handle);
-  if (is_task_done_) {
-    is_task_done_ = false;
-    poll_task_ = poll_timer();
-    spdlog::debug("TimerContext::reset() add_event {}",
-                  poll_task_.get_handle().address());
-    PollerBase::instance().add_event(clock_fd_, PollEvent::read(),
-                                     poll_task_.get_handle());
+    while (!timers_.empty() &&
+           timers_.top().expired_time <= std::chrono::steady_clock::now()) {
+      auto top = std::move(timers_.top());
+      timers_.pop();
+      top.handle_.resume();
+    }
+    reset();
   }
 }
 
-Task<void> TimerContext::poll_timer() {
+TimerContext::SleepAwaiter
+TimerContext::sleep_until(std::chrono::steady_clock::time_point expireTime) {
+  return SleepAwaiter(expireTime, shared_from_this());
+}
 
-  co_await SupsendAwaiter{};
+TimerContext::SleepAwaiter
+TimerContext::sleep_for(std::chrono::steady_clock::duration duration) {
+  return SleepAwaiter(std::chrono::steady_clock::now() + duration,
+                      shared_from_this());
+}
 
-  spdlog::debug("TimerContext::poll_timer() start");
-
-  uint64_t exp = 0;
-  detail::system_call_value<ssize_t>(::read(clock_fd_, &exp, sizeof(exp)))
-      .execption("read poller");
-
-  while (!timers_.empty() &&
-         timers_.top().expired_time <= std::chrono::steady_clock::now()) {
-    spdlog::debug("TimerContext::poll_timer() pop");
-    auto top = timers_.top();
-    timers_.pop();
-    top.handle_.resume();
-  }
-  spdlog::debug("TimerContext::poll_timer() end");
-
-  poll_done_ = std::move(poll_task_);
-  is_task_done_ = true;
-  reset();
-  co_return;
+TaskNoSuspend<void> TimerContext::delay_run(std::chrono::steady_clock::duration duration,
+                              std::function<void()> func) {
+  co_await sleep_for(duration);
+  func();
 }
 
 } // namespace co_io

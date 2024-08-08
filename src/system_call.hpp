@@ -30,6 +30,7 @@ public:
   operator T() const { return value(); }
 
   bool is_error() const noexcept { return value_ < 0 && errno_ != 0; }
+  bool is_error(int err) const noexcept { return value_ < 0 && errno_ == err; }
 
   T execption(const char *what) const {
     if (errno_ != 0) {
