@@ -12,7 +12,8 @@ set(CMAKE_C_COMPILER ${CMAKE_CXX_COMPILER})
 
 project(co_io LANGUAGES CXX)
 
-add_compile_options(-Wall -Wextra -Wpedantic -Werror -Werror=uninitialized -gdwarf-4
+add_compile_options(-Wall -Wextra -Wpedantic -Werror -Werror=uninitialized
+-gdwarf-4
       -Werror=return-type
       -Wconversion
       -Werror=unused-result
@@ -41,3 +42,7 @@ target_include_directories(echo_client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_executable(timers "examples/timers.cpp")
 target_link_libraries(timers co_io)
 target_include_directories(timers PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# add_executable(test_task "examples/test_task.cpp")
+# target_link_libraries(test_task co_io)
+# target_include_directories(test_task PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
