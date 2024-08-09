@@ -92,6 +92,7 @@ public:
 
 private:
   int epoll_fd_;
+  std::array<struct epoll_event, 1024> events_ {};
 };
 
 using PollerBasePtr = std::shared_ptr<PollerBase>;

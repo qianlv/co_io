@@ -125,9 +125,9 @@ void EPollPoller::unregister_fd(int fd) {
 }
 
 void EPollPoller::poll() {
-  std::array<struct epoll_event, 128> events;
-  auto ret = detail::system_call(
-      epoll_pwait(epoll_fd_, events.data(), events.size(), -1, nullptr));
+  auto ret = detail::system_call(epoll_pwait(epoll_fd_, events_.data(),
+                                             static_cast<int>(events_.size()),
+                                             -1, nullptr));
 
   if (ret.is_error(EINTR)) {
     return;
@@ -136,11 +136,9 @@ void EPollPoller::poll() {
   int n = ret.value();
 
   for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
-    auto &ev = events[i];
-    if (ev.data.ptr) {
-      auto handle = std::coroutine_handle<>::from_address(ev.data.ptr);
-      handle.resume();
-    }
+    auto &ev = events_[i];
+    auto handle = std::coroutine_handle<>::from_address(ev.data.ptr);
+    handle.resume();
   }
 }
 
