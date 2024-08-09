@@ -4,17 +4,38 @@
 
 namespace co_io {
 
-void TimerContext::add_timer(std::chrono::steady_clock::time_point expired_time,
-                             std::coroutine_handle<> coroutine) {
+uint32_t
+TimerContext::add_timer(std::chrono::steady_clock::time_point expired_time,
+                        std::coroutine_handle<> coroutine) {
+  return add_timer(expired_time, [coroutine]() { coroutine.resume(); });
+}
+
+uint32_t
+TimerContext::add_timer(std::chrono::steady_clock::time_point expired_time,
+                        std::function<void()> callback) {
+
   bool is_reset =
       (timers_.empty() || expired_time < timers_.top().expired_time);
-  timers_.emplace(expired_time, coroutine);
+  timers_.emplace(expired_time, std::move(callback), ++next_timer_id_);
   if (is_reset) {
     reset();
   }
+  return next_timer_id_;
 }
 
+void TimerContext::cancel_timer(uint64_t id) { cancel_timers_.insert(id); }
+
 void TimerContext::reset() {
+  while (!cancel_timers_.empty() && !timers_.empty()) { // remove cancel timer
+    auto it = cancel_timers_.find(timers_.top().id);
+    if (it != cancel_timers_.end()) {
+      timers_.pop();
+      cancel_timers_.erase(it);
+    } else {
+      break;
+    }
+  }
+
   if (timers_.empty()) {
     return;
   }
@@ -47,7 +68,11 @@ TaskNoSuspend<void> TimerContext::poll_timer() {
            timers_.top().expired_time <= std::chrono::steady_clock::now()) {
       auto top = std::move(timers_.top());
       timers_.pop();
-      top.handle_.resume();
+      if (cancel_timers_.find(top.id) != cancel_timers_.end()) {
+        cancel_timers_.erase(top.id);
+        continue;
+      }
+      top.callback();
     }
     reset();
   }
@@ -55,17 +80,17 @@ TaskNoSuspend<void> TimerContext::poll_timer() {
 
 TimerContext::SleepAwaiter
 TimerContext::sleep_until(std::chrono::steady_clock::time_point expireTime) {
-  return SleepAwaiter(expireTime, shared_from_this());
+  return SleepAwaiter(expireTime, this);
 }
 
 TimerContext::SleepAwaiter
 TimerContext::sleep_for(std::chrono::steady_clock::duration duration) {
-  return SleepAwaiter(std::chrono::steady_clock::now() + duration,
-                      shared_from_this());
+  return SleepAwaiter(std::chrono::steady_clock::now() + duration, this);
 }
 
-TaskNoSuspend<void> TimerContext::delay_run(std::chrono::steady_clock::duration duration,
-                              std::function<void()> func) {
+TaskNoSuspend<void>
+TimerContext::delay_run(std::chrono::steady_clock::duration duration,
+                        std::function<void()> func) {
   co_await sleep_for(duration);
   func();
 }

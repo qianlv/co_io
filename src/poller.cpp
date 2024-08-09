@@ -1,6 +1,5 @@
 #include "poller.hpp"
 #include "system_call.hpp"
-#include "timer_context.hpp"
 namespace co_io {
 
 SelectPoller::SelectPoller() : PollerBase() {
@@ -10,14 +9,13 @@ SelectPoller::SelectPoller() : PollerBase() {
 
 void SelectPoller::register_fd(int) { ; }
 
-void SelectPoller::add_event(int fd, PollEvent event,
-                             std::coroutine_handle<> handle) {
+void SelectPoller::add_event(int fd, PollEvent event, callback handle) {
   if (auto it = events_.find(fd); it != events_.end()) {
     it->second.event = it->second.event | event;
     it->second.handle = handle;
   } else {
     events_.emplace_hint(
-        it, fd, PollerEvent{.fd = fd, .event = event, .handle = handle});
+        it, fd, PollerEvent{.fd = fd, .event = event, .handle = std::move(handle)});
     max_fd_ = std::max(max_fd_, fd);
   }
 
@@ -49,19 +47,14 @@ void SelectPoller::poll() {
 
   fd_set read_set{read_set_}, write_set{write_set_};
 
-  auto ret = detail::system_call(
-      pselect(max_fd_ + 1, &read_set, &write_set, nullptr, nullptr, nullptr));
-
-  if (ret.is_error(EINTR)) {
-    return;
-  }
-
-  int n = ret.value();
+  int n = detail::system_call(pselect(max_fd_ + 1, &read_set, &write_set,
+                                      nullptr, nullptr, nullptr))
+              .execption("pselect");
 
   if (n > 0) {
     for (auto it = events_.begin(); it != events_.end();) {
       if (FD_ISSET(it->first, &read_set) || FD_ISSET(it->first, &write_set)) {
-        it->second.handle.resume();
+        it->second.handle();
       }
 
       if (it->second.event == PollEvent::none()) {
@@ -95,8 +88,7 @@ void EPollPoller::register_fd(int fd) {
       .execption("epoll_ctl register_fd");
 }
 
-void EPollPoller::add_event(int fd, PollEvent event,
-                            std::coroutine_handle<> handle) {
+void EPollPoller::add_event(int fd, PollEvent event, callback handle) {
   struct epoll_event ev;
   ev.events = EPOLLERR | EPOLLET;
   if (event & PollEvent::read()) {
@@ -105,7 +97,7 @@ void EPollPoller::add_event(int fd, PollEvent event,
   if (event & PollEvent::write()) {
     ev.events |= EPOLLOUT;
   }
-  ev.data.ptr = handle.address();
+  ev.data.ptr = new callback(std::move(handle));
 
   detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
       .execption("epoll_ctl add_event");
@@ -126,13 +118,15 @@ void EPollPoller::unregister_fd(int fd) {
 
 void EPollPoller::poll() {
   int n = detail::system_call(epoll_pwait(epoll_fd_, events_.data(),
-                                             static_cast<int>(events_.size()),
-                                             -1, nullptr)).execption("epoll_pwait");
+                                          static_cast<int>(events_.size()), -1,
+                                          nullptr))
+              .execption("epoll_pwait");
 
   for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
     auto &ev = events_[i];
-    auto handle = std::coroutine_handle<>::from_address(ev.data.ptr);
-    handle.resume();
+    auto cb = reinterpret_cast<callback *>(ev.data.ptr);
+    cb->operator()();
+    delete cb;
   }
 }
 

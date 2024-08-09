@@ -95,28 +95,45 @@ struct AddressSolver {
   }
 };
 
+class LoopBase;
+
 class AsyncFile : public FileDescriptor {
 public:
-  template <typename T> struct OnceAwaiter {
-    std::function<detail::system_call_value<T>()> func_;
+  template <typename ret_type> struct TaskAsnyc {
+    struct promise_type;
+    using handle_type = std::coroutine_handle<promise_type>;
 
-    bool await_ready() const noexcept { return false; }
-    void await_suspend(std::coroutine_handle<>) const noexcept {}
-    detail::system_call_value<T> await_resume() const { return func_(); }
-  };
-  template <typename T> struct TaskAwaiter {
+    struct OnceAwaiter {
+      std::function<ret_type()> func_;
+      handle_type task_handle_;
+
+      bool await_ready() const noexcept { return false; }
+      void await_suspend(std::coroutine_handle<>) const noexcept {}
+      ret_type await_resume() const {
+        if (task_handle_.promise().is_timeout) {
+          return ret_type{-1, ECANCELED};
+        }
+        return func_();
+      }
+    };
+
     struct promise_type {
       std::exception_ptr exception_;
-      T return_value_;
-      using handle_type = std::coroutine_handle<promise_type>;
+      ret_type return_value_;
       std::coroutine_handle<> caller_;
+      bool is_timeout = false;
 
-      TaskAwaiter get_return_object() {
+      TaskAsnyc get_return_object() {
         return {handle_type::from_promise(*this)};
       }
       std::suspend_never initial_suspend() { return {}; }
       std::suspend_never final_suspend() noexcept { return {}; }
-      void return_value(T value) noexcept {
+
+      OnceAwaiter await_transform(std::function<ret_type()> func) {
+        return OnceAwaiter{func, handle_type::from_promise(*this)};
+      }
+
+      void return_value(ret_type value) noexcept {
         return_value_ = std::move(value);
         if (exception_) {
           std::rethrow_exception(exception_);
@@ -128,11 +145,11 @@ public:
 
     auto get_handle() const { return handle_; }
 
-    std::coroutine_handle<promise_type> handle_;
+    handle_type handle_;
   };
 
   template <typename T> struct FinalAwaiter {
-    TaskAwaiter<T> task;
+    TaskAsnyc<T> task;
 
     bool await_ready() const noexcept { return false; }
     void await_suspend(std::coroutine_handle<> h) const noexcept {
@@ -142,7 +159,7 @@ public:
     T await_resume() const { return task.get_handle().promise().return_value_; }
   };
 
-  explicit AsyncFile(int fd, std::shared_ptr<PollerBase> poller);
+  explicit AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec = 0);
 
   FinalAwaiter<detail::system_call_value<ssize_t>> async_read(void *buf,
                                                               size_t size);
@@ -152,8 +169,7 @@ public:
   async_accept(AddressSolver::Address &);
   FinalAwaiter<detail::system_call_value<int>>
   async_connect(AddressSolver::Address const &addr);
-  static AsyncFile bind(AddressSolver::AddressInfo const &addr,
-                        PollerBasePtr poller);
+  static AsyncFile bind(AddressSolver::AddressInfo const &addr, LoopBase *loop);
 
   AsyncFile(AsyncFile &&other) = default;
   AsyncFile &operator=(AsyncFile &&other) = default;
@@ -165,10 +181,11 @@ public:
 
 private:
   template <typename Ret>
-  TaskAwaiter<detail::system_call_value<Ret>>
+  TaskAsnyc<detail::system_call_value<Ret>>
   async_r(std::function<detail::system_call_value<Ret>()> func);
 
-  std::shared_ptr<PollerBase> poller_;
+  LoopBase *loop_;
+  unsigned time_out_sec_ = 0;
 };
 
 } // namespace co_io

@@ -1,11 +1,12 @@
 #pragma once
 
+#include <array>
 #include <coroutine>
+#include <functional>
 #include <memory>
 #include <sys/epoll.h>
 #include <sys/select.h>
 #include <unordered_map>
-#include <array>
 
 namespace co_io {
 
@@ -44,16 +45,17 @@ public:
 
 class PollerBase {
 public:
+  using callback = std::function<void()>;
   struct PollerEvent {
     int fd;
     PollEvent event;
-    std::coroutine_handle<> handle;
+    callback handle;
   };
 
   virtual void register_fd(int fd) = 0;
   virtual void unregister_fd(int fd) = 0;
   virtual void add_event(int fd, PollEvent event,
-                         std::coroutine_handle<> handle) = 0;
+                         callback handle) = 0;
   virtual void remove_event(int fd, PollEvent event) = 0;
   virtual void poll() = 0;
 
@@ -66,7 +68,7 @@ public:
 
   void register_fd(int) override;
   void add_event(int fd, PollEvent event,
-                 std::coroutine_handle<> handle) override;
+                 callback handle) override;
   void remove_event(int fd, PollEvent event) override;
   void unregister_fd(int fd) override;
   void poll() override;
@@ -85,16 +87,16 @@ public:
 
   void register_fd(int fd) override;
   void add_event(int fd, PollEvent event,
-                 std::coroutine_handle<> handle) override;
+                 callback handle) override;
   void remove_event(int fd, PollEvent event) override;
   void unregister_fd(int fd) override;
   void poll() override;
 
 private:
   int epoll_fd_;
-  std::array<struct epoll_event, 1024> events_ {};
+  std::array<struct epoll_event, 1024> events_{};
 };
 
-using PollerBasePtr = std::shared_ptr<PollerBase>;
+using PollerBasePtr = std::unique_ptr<PollerBase>;
 
 } // namespace co_io

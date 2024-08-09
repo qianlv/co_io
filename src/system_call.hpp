@@ -14,6 +14,7 @@ public:
       errno_ = errno;
     }
   }
+  explicit system_call_value(int value, int err) : value_(value), errno_(err) {}
 
   system_call_value() = default;
   ~system_call_value() = default;

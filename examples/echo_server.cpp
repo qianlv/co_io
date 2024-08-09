@@ -1,6 +1,5 @@
 #include "async_file.hpp"
 #include "loop.hpp"
-#include "poller.hpp"
 #include "task.hpp"
 
 #include <iostream>
@@ -9,12 +8,13 @@ using namespace co_io;
 
 std::unique_ptr<LoopBase> loop;
 TaskNoSuspend<void> client(AsyncFile async_file);
-TaskNoSuspend<void> server(AsyncFile &async_file, PollerBasePtr poller);
+TaskNoSuspend<void> server(AsyncFile &async_file);
 
 TaskNoSuspend<void> client(AsyncFile async_file) {
   char buffer[512];
   while (true) {
     auto t = co_await async_file.async_read(buffer, 512);
+    // std::cerr << t.what() << std::endl;
     auto size = t.value();
     if (size == 0) {
       break;
@@ -23,12 +23,12 @@ TaskNoSuspend<void> client(AsyncFile async_file) {
   }
 }
 
-TaskNoSuspend<void> server(AsyncFile &async_file, PollerBasePtr poller) {
+TaskNoSuspend<void> server(AsyncFile &async_file ) {
   while (true) {
     AddressSolver::Address addr;
     auto t = co_await async_file.async_accept(addr);
     int fd = t.value();
-    client(AsyncFile{fd, poller});
+    client(AsyncFile{fd, loop.get(), 0});
   }
 }
 
@@ -66,9 +66,9 @@ int main(int argc, char *argv[]) {
 
   AddressSolver solver{"localhost", "12345"};
   AddressSolver::AddressInfo info = solver.get_address_info();
-  AsyncFile async_file = AsyncFile::bind(info, loop->poller());
+  AsyncFile async_file = AsyncFile::bind(info, loop.get());
 
-  server(async_file, loop->poller());
+  server(async_file);
   loop->run();
   return 0;
 }

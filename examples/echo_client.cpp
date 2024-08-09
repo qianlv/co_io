@@ -10,11 +10,10 @@ TaskNoSuspend<void> echo(std::string_view ip, std::string_view port,
                          std::shared_ptr<LoopBase> loop);
 TaskNoSuspend<void> echo(std::string_view ip, std::string_view port,
                          std::shared_ptr<LoopBase> loop) {
-  auto poller = loop->poller();
-  AsyncFile stdin_file{STDIN_FILENO, poller};
+  AsyncFile stdin_file{STDIN_FILENO, loop.get()};
   AddressSolver solver{ip, port};
   AddressSolver::AddressInfo info = solver.get_address_info();
-  AsyncFile async_file{info.create_socket(), poller};
+  AsyncFile async_file{info.create_socket(), loop.get()};
   (co_await async_file.async_connect(info.get_address()))
       .execption("async_connect");
 

@@ -5,32 +5,35 @@
 #include <fcntl.h>
 #include <queue>
 #include <sys/timerfd.h>
+#include <unordered_set>
 
 #include "async_file.hpp"
-#include "poller.hpp"
-#include "system_call.hpp"
 #include "task.hpp"
 
 namespace co_io {
 
 class TimerContext;
-using TimerContextPtr = std::shared_ptr<TimerContext>;
+class LoopBase;
 
-class TimerContext : public std::enable_shared_from_this<TimerContext> {
+class TimerContext {
   struct SleepAwaiter;
 
 public:
-  TimerContext(PollerBasePtr poller)
+  TimerContext(LoopBase *loop)
       : clock_fd_(
             detail::system_call_value<int>(::timerfd_create(CLOCK_MONOTONIC, 0))
                 .execption("timerfd_create"),
-            poller),
-        poller_(poller) {
+            loop),
+        loop_(loop) {
     poll_timer();
   }
 
-  void add_timer(std::chrono::steady_clock::time_point expired_time,
+  uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,
                  std::coroutine_handle<> coroutine);
+  uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,
+                 std::function<void()> callback);
+
+  void cancel_timer(uint64_t id);
 
   SleepAwaiter sleep_until(std::chrono::steady_clock::time_point expireTime);
   SleepAwaiter sleep_for(std::chrono::steady_clock::duration duration);
@@ -40,7 +43,8 @@ public:
 private:
   struct TimerEntry {
     std::chrono::steady_clock::time_point expired_time;
-    std::coroutine_handle<> handle_;
+    std::function<void()> callback;
+    uint64_t id;
 
     bool operator<(const TimerEntry &other) const noexcept {
       return expired_time >= other.expired_time;
@@ -55,7 +59,7 @@ private:
     void await_resume() const noexcept { return; }
 
     std::chrono::steady_clock::time_point expired_time;
-    TimerContextPtr timer_context;
+    TimerContext *timer_context;
   };
 
   void reset();
@@ -63,8 +67,12 @@ private:
   TaskNoSuspend<void> poll_timer();
 
   std::priority_queue<TimerEntry> timers_;
+  std::unordered_set<uint64_t> cancel_timers_;
   AsyncFile clock_fd_;
-  PollerBasePtr poller_;
+  LoopBase *loop_;
+  uint32_t next_timer_id_ = 0;
 };
+
+using TimerContextPtr = std::unique_ptr<TimerContext>;
 
 } // namespace co_io

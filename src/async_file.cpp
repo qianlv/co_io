@@ -1,57 +1,77 @@
 #include "async_file.hpp"
+#include "loop.hpp"
 #include "system_call.hpp"
+#include <iostream>
 
 namespace co_io {
 
-AsyncFile::AsyncFile(int fd, std::shared_ptr<PollerBase> poller)
-    : FileDescriptor(fd), poller_(std::move(poller)) {
+AsyncFile::AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec)
+    : FileDescriptor(fd), loop_(loop), time_out_sec_(time_out_sec) {
   auto flags = detail::system_call(fcntl(fd, F_GETFL)).execption("fcntl");
   detail::system_call(fcntl(fd, F_SETFL, flags | O_NONBLOCK))
       .execption("fcntl");
-  poller_->register_fd(fd);
+  loop_->poller()->register_fd(fd);
 }
 
 AsyncFile::FinalAwaiter<detail::system_call_value<ssize_t>>
 AsyncFile::async_read(void *buf, size_t size) {
-  int fd = this->fd();
-  auto task = async_r<ssize_t>(
-      [fd, buf, size]() { return detail::system_call(::read(fd, buf, size)); });
-  poller_->add_event(fd, PollEvent::read(), task.get_handle());
+  auto task = async_r<ssize_t>([fd = this->fd(), buf, size]() {
+    return detail::system_call(::read(fd, buf, size));
+  });
+  auto task_handle = task.get_handle();
+  uint32_t timer_id = 0;
+  bool has_timer = false;
+  if (time_out_sec_ > 0) {
+    has_timer = true;
+    timer_id = loop_->timer()->add_timer(
+        std::chrono::steady_clock::now() + std::chrono::seconds(time_out_sec_),
+        [fd = this->fd(), loop = this->loop_, task_handle] {
+          task_handle.promise().is_timeout = true;
+          loop->poller()->remove_event(fd, PollEvent::read());
+          task_handle.resume();
+        });
+  }
+
+  loop_->poller()->add_event(this->fd(), PollEvent::read(), [timer_id, has_timer, task_handle, loop = this->loop_] {
+    if (has_timer) {
+      loop->timer()->cancel_timer(timer_id);
+    }
+    task_handle.resume();
+  });
   return FinalAwaiter<detail::system_call_value<ssize_t>>{std::move(task)};
 }
 
 AsyncFile::FinalAwaiter<detail::system_call_value<ssize_t>>
 AsyncFile::async_write(void *buf, size_t size) {
-  int fd = this->fd();
-  auto task = async_r<ssize_t>([fd, buf, size]() {
+  auto task = async_r<ssize_t>([fd = this->fd(), buf, size]() {
     return detail::system_call(::write(fd, buf, size));
   });
-  poller_->add_event(fd, PollEvent::write(), task.get_handle());
+
+  loop_->poller()->add_event(this->fd(), PollEvent::write(), task.get_handle());
   return FinalAwaiter<detail::system_call_value<ssize_t>>{std::move(task)};
 }
 
 AsyncFile::FinalAwaiter<detail::system_call_value<int>>
 AsyncFile::async_accept(AddressSolver::Address &) {
-  int fd = this->fd();
-  auto task = async_r<int>(
-      [fd]() { return detail::system_call(::accept(fd, nullptr, nullptr)); });
-  poller_->add_event(fd, PollEvent::read(), task.get_handle());
+  auto task = async_r<int>([fd = this->fd()]() {
+    return detail::system_call(::accept(fd, nullptr, nullptr));
+  });
+  loop_->poller()->add_event(this->fd(), PollEvent::read(), task.get_handle());
   return FinalAwaiter<detail::system_call_value<int>>{std::move(task)};
 }
 
 AsyncFile::FinalAwaiter<detail::system_call_value<int>>
 AsyncFile::async_connect(AddressSolver::Address const &addr) {
-  int fd = this->fd();
-  auto task = async_r<int>([fd, &addr]() {
+  auto task = async_r<int>([fd = this->fd(), &addr]() {
     return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
   });
-  poller_->add_event(fd, PollEvent::write(), task.get_handle());
+  loop_->poller()->add_event(this->fd(), PollEvent::write(), task.get_handle());
   return FinalAwaiter<detail::system_call_value<int>>{std::move(task)};
 }
 
 AsyncFile AsyncFile::bind(AddressSolver::AddressInfo const &addr,
-                          PollerBasePtr poller) {
-  auto async_file = AsyncFile(addr.create_socket(), std::move(poller));
+                          LoopBase *loop) {
+  auto async_file = AsyncFile(addr.create_socket(), loop);
   AddressSolver::Address serve = addr.get_address();
   int on = 1;
   detail::system_call(
@@ -67,13 +87,12 @@ AsyncFile AsyncFile::bind(AddressSolver::AddressInfo const &addr,
 }
 
 template <typename Ret>
-AsyncFile::TaskAwaiter<detail::system_call_value<Ret>>
+AsyncFile::TaskAsnyc<detail::system_call_value<Ret>>
 AsyncFile::async_r(std::function<detail::system_call_value<Ret>()> func) {
-  auto onceAwaiter = OnceAwaiter<Ret>{std::move(func)};
   while (true) {
-    auto ret = co_await onceAwaiter;
+    auto ret = co_await func;
     if (!ret.is_nonblocking_error()) {
-      poller_->remove_event(fd(), PollEvent::read_write());
+      loop_->poller()->remove_event(fd(), PollEvent::read_write());
       co_return ret;
     }
   }
@@ -81,7 +100,7 @@ AsyncFile::async_r(std::function<detail::system_call_value<Ret>()> func) {
 
 AsyncFile::~AsyncFile() {
   if (fd() != -1) {
-    poller_->unregister_fd(fd());
+    loop_->poller()->unregister_fd(fd());
   }
 }
 
