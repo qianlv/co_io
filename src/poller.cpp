@@ -125,15 +125,9 @@ void EPollPoller::unregister_fd(int fd) {
 }
 
 void EPollPoller::poll() {
-  auto ret = detail::system_call(epoll_pwait(epoll_fd_, events_.data(),
+  int n = detail::system_call(epoll_pwait(epoll_fd_, events_.data(),
                                              static_cast<int>(events_.size()),
-                                             -1, nullptr));
-
-  if (ret.is_error(EINTR)) {
-    return;
-  }
-
-  int n = ret.value();
+                                             -1, nullptr)).execption("epoll_pwait");
 
   for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
     auto &ev = events_[i];
