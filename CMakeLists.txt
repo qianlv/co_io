@@ -7,17 +7,7 @@ if (NOT CMAKE_BUILD_TYPE)
       set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# set(COMPILE_FLAGS -Wall -Wextra -Wpedantic -Werror -Werror=uninitialized
-#       -Werror=return-type
-#       -Wconversion
-#       -Werror=unused-result
-#       -Werror=suggest-override
-#       -Wzero-as-null-pointer-constant
-#       -Wmissing-declarations
-#       -Wold-style-cast
-#       -Wnon-virtual-dtor
-#       -Wcast-align
-#       -Wdouble-promotion)
+set(COMPILE_FLAGS -Wall -Wextra -Werror -Werror=uninitialized -Werror=return-type -Wno-unused-parameter)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
       set(COMPILE_FLAGS ${COMPILE_FLAGS} -g -ggdb3 -O0)
@@ -43,14 +33,13 @@ target_link_libraries(co_io llhttp_static)
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(co_io spdlog::spdlog spdlog::spdlog_header_only)
 
-add_executable(echo_server "examples/echo_server.cpp")
-target_link_libraries(echo_server co_io)
-target_include_directories(echo_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+macro(add_exec source name)
+      add_executable(${name} ${source}/${name}.cpp)
+      target_link_libraries(${name} co_io)
+      target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endmacro()
 
-add_executable(echo_client "examples/echo_client.cpp")
-target_link_libraries(echo_client co_io)
-target_include_directories(echo_client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-add_executable(timers "examples/timers.cpp")
-target_link_libraries(timers co_io)
-target_include_directories(timers PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_exec(examples echo_server)
+add_exec(examples echo_client)
+add_exec(examples timers)
+add_exec(examples http_parser_test)
