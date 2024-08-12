@@ -23,12 +23,12 @@ TaskNoSuspend<void> client(AsyncFile async_file) {
   }
 }
 
-TaskNoSuspend<void> server(AsyncFile &async_file ) {
+TaskNoSuspend<void> server(AsyncFile &async_file) {
   while (true) {
     AddressSolver::Address addr;
     auto t = co_await async_file.async_accept(addr);
     int fd = t.value();
-    client(AsyncFile{fd, loop.get(), 0});
+    client(AsyncFile{fd, loop.get(), 1});
   }
 }
 

@@ -13,7 +13,7 @@ AsyncFile::AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec)
   loop_->poller()->register_fd(fd);
 }
 
-AsyncFile::FinalAwaiter<detail::system_call_value<ssize_t>>
+AsyncFile::FinalAwaiter<detail::Execpted<ssize_t>>
 AsyncFile::async_read(void *buf, size_t size) {
   auto task = async_r<ssize_t>([fd = this->fd(), buf, size]() {
     return detail::system_call(::read(fd, buf, size));
@@ -32,41 +32,43 @@ AsyncFile::async_read(void *buf, size_t size) {
         });
   }
 
-  loop_->poller()->add_event(this->fd(), PollEvent::read(), [timer_id, has_timer, task_handle, loop = this->loop_] {
-    if (has_timer) {
-      loop->timer()->cancel_timer(timer_id);
-    }
-    task_handle.resume();
-  });
-  return FinalAwaiter<detail::system_call_value<ssize_t>>{std::move(task)};
+  loop_->poller()->add_event(
+      this->fd(), PollEvent::read(),
+      [timer_id, has_timer, task_handle, loop = this->loop_] {
+        if (has_timer) {
+          loop->timer()->cancel_timer(timer_id);
+        }
+        task_handle.resume();
+      });
+  return FinalAwaiter<detail::Execpted<ssize_t>>{std::move(task)};
 }
 
-AsyncFile::FinalAwaiter<detail::system_call_value<ssize_t>>
+AsyncFile::FinalAwaiter<detail::Execpted<ssize_t>>
 AsyncFile::async_write(void *buf, size_t size) {
   auto task = async_r<ssize_t>([fd = this->fd(), buf, size]() {
     return detail::system_call(::write(fd, buf, size));
   });
 
   loop_->poller()->add_event(this->fd(), PollEvent::write(), task.get_handle());
-  return FinalAwaiter<detail::system_call_value<ssize_t>>{std::move(task)};
+  return FinalAwaiter<detail::Execpted<ssize_t>>{std::move(task)};
 }
 
-AsyncFile::FinalAwaiter<detail::system_call_value<int>>
+AsyncFile::FinalAwaiter<detail::Execpted<int>>
 AsyncFile::async_accept(AddressSolver::Address &) {
   auto task = async_r<int>([fd = this->fd()]() {
     return detail::system_call(::accept(fd, nullptr, nullptr));
   });
   loop_->poller()->add_event(this->fd(), PollEvent::read(), task.get_handle());
-  return FinalAwaiter<detail::system_call_value<int>>{std::move(task)};
+  return FinalAwaiter<detail::Execpted<int>>{std::move(task)};
 }
 
-AsyncFile::FinalAwaiter<detail::system_call_value<int>>
+AsyncFile::FinalAwaiter<detail::Execpted<int>>
 AsyncFile::async_connect(AddressSolver::Address const &addr) {
   auto task = async_r<int>([fd = this->fd(), &addr]() {
     return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
   });
   loop_->poller()->add_event(this->fd(), PollEvent::write(), task.get_handle());
-  return FinalAwaiter<detail::system_call_value<int>>{std::move(task)};
+  return FinalAwaiter<detail::Execpted<int>>{std::move(task)};
 }
 
 AsyncFile AsyncFile::bind(AddressSolver::AddressInfo const &addr,
@@ -87,8 +89,8 @@ AsyncFile AsyncFile::bind(AddressSolver::AddressInfo const &addr,
 }
 
 template <typename Ret>
-AsyncFile::TaskAsnyc<detail::system_call_value<Ret>>
-AsyncFile::async_r(std::function<detail::system_call_value<Ret>()> func) {
+AsyncFile::TaskAsnyc<detail::Execpted<Ret>>
+AsyncFile::async_r(std::function<detail::Execpted<Ret>()> func) {
   while (true) {
     auto ret = co_await func;
     if (!ret.is_nonblocking_error()) {

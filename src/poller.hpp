@@ -54,8 +54,7 @@ public:
 
   virtual void register_fd(int fd) = 0;
   virtual void unregister_fd(int fd) = 0;
-  virtual void add_event(int fd, PollEvent event,
-                         callback handle) = 0;
+  virtual void add_event(int fd, PollEvent event, callback handle) = 0;
   virtual void remove_event(int fd, PollEvent event) = 0;
   virtual void poll() = 0;
 
@@ -67,8 +66,7 @@ public:
   SelectPoller();
 
   void register_fd(int) override;
-  void add_event(int fd, PollEvent event,
-                 callback handle) override;
+  void add_event(int fd, PollEvent event, callback handle) override;
   void remove_event(int fd, PollEvent event) override;
   void unregister_fd(int fd) override;
   void poll() override;
@@ -86,8 +84,7 @@ public:
   ~EPollPoller() override;
 
   void register_fd(int fd) override;
-  void add_event(int fd, PollEvent event,
-                 callback handle) override;
+  void add_event(int fd, PollEvent event, callback handle) override;
   void remove_event(int fd, PollEvent event) override;
   void unregister_fd(int fd) override;
   void poll() override;

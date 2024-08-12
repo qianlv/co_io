@@ -161,13 +161,10 @@ public:
 
   explicit AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec = 0);
 
-  FinalAwaiter<detail::system_call_value<ssize_t>> async_read(void *buf,
-                                                              size_t size);
-  FinalAwaiter<detail::system_call_value<ssize_t>> async_write(void *buf,
-                                                               size_t size);
-  FinalAwaiter<detail::system_call_value<int>>
-  async_accept(AddressSolver::Address &);
-  FinalAwaiter<detail::system_call_value<int>>
+  FinalAwaiter<detail::Execpted<ssize_t>> async_read(void *buf, size_t size);
+  FinalAwaiter<detail::Execpted<ssize_t>> async_write(void *buf, size_t size);
+  FinalAwaiter<detail::Execpted<int>> async_accept(AddressSolver::Address &);
+  FinalAwaiter<detail::Execpted<int>>
   async_connect(AddressSolver::Address const &addr);
   static AsyncFile bind(AddressSolver::AddressInfo const &addr, LoopBase *loop);
 
@@ -181,8 +178,8 @@ public:
 
 private:
   template <typename Ret>
-  TaskAsnyc<detail::system_call_value<Ret>>
-  async_r(std::function<detail::system_call_value<Ret>()> func);
+  TaskAsnyc<detail::Execpted<Ret>>
+  async_r(std::function<detail::Execpted<Ret>()> func);
 
   LoopBase *loop_;
   unsigned time_out_sec_ = 0;

@@ -7,17 +7,20 @@
 namespace co_io {
 namespace detail {
 
-template <typename T> class system_call_value {
+template <typename T> class Execpted {
 public:
-  explicit system_call_value(T value) : value_(value) {
-    if (value_ == -1) {
+  explicit Execpted(T value) {
+    if (value < 0) {
       errno_ = errno;
+    } else {
+      value_ = value;
     }
   }
-  explicit system_call_value(int value, int err) : value_(value), errno_(err) {}
 
-  system_call_value() = default;
-  ~system_call_value() = default;
+  explicit Execpted(int, int err) : errno_(err) {}
+
+  Execpted() = default;
+  ~Execpted() = default;
 
   T value() const {
     if (errno_ != 0) {
@@ -42,19 +45,19 @@ public:
   }
 
   bool is_nonblocking_error() const noexcept {
-    return value_ < 0 &&
-           (errno_ == EAGAIN || errno_ == EINTR || errno_ == EINPROGRESS || errno_ == EWOULDBLOCK);
+    return value_ < 0 && (errno_ == EAGAIN || errno_ == EINTR ||
+                          errno_ == EINPROGRESS || errno_ == EWOULDBLOCK);
   }
 
-  const char* what() const noexcept { return strerror(errno_); }
+  const char *what() const noexcept { return strerror(errno_); }
 
 private:
-  T value_{};
-  int errno_ = 0;
+  T value_ = {};
+  int errno_ = {};
 };
 
-template <typename T> system_call_value<T> system_call(T syscall) {
-  return system_call_value<T>(syscall);
+template <typename T> Execpted<T> system_call(T syscall) {
+  return Execpted<T>(syscall);
 }
 
 } // namespace detail

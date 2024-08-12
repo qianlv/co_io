@@ -54,7 +54,7 @@ void TimerContext::reset() {
   new_value.it_interval.tv_sec = 0;
   new_value.it_interval.tv_nsec = 0;
 
-  detail::system_call_value<int>(
+  detail::Execpted<int>(
       ::timerfd_settime(clock_fd_.fd(), 0, &new_value, nullptr))
       .execption("timerfd_settime");
 }

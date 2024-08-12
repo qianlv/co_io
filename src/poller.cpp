@@ -15,7 +15,8 @@ void SelectPoller::add_event(int fd, PollEvent event, callback handle) {
     it->second.handle = handle;
   } else {
     events_.emplace_hint(
-        it, fd, PollerEvent{.fd = fd, .event = event, .handle = std::move(handle)});
+        it, fd,
+        PollerEvent{.fd = fd, .event = event, .handle = std::move(handle)});
     max_fd_ = std::max(max_fd_, fd);
   }
 
@@ -76,15 +77,16 @@ void SelectPoller::poll() {
 }
 
 EPollPoller::EPollPoller()
-    : PollerBase(), epoll_fd_(detail::system_call_value(epoll_create1(0))
-                                  .execption("epoll_create1")) {}
+    : PollerBase(),
+      epoll_fd_(detail::Execpted(epoll_create1(0)).execption("epoll_create1")) {
+}
 EPollPoller::~EPollPoller() { ::close(epoll_fd_); }
 
 void EPollPoller::register_fd(int fd) {
   struct epoll_event ev;
   ev.events = 0;
   ev.data.ptr = nullptr;
-  detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev))
+  detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev))
       .execption("epoll_ctl register_fd");
 }
 
@@ -99,7 +101,7 @@ void EPollPoller::add_event(int fd, PollEvent event, callback handle) {
   }
   ev.data.ptr = new callback(std::move(handle));
 
-  detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
+  detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
       .execption("epoll_ctl add_event");
 }
 
@@ -107,12 +109,12 @@ void EPollPoller::remove_event(int fd, PollEvent) {
   struct epoll_event ev;
   ev.events = 0;
   ev.data.ptr = nullptr;
-  detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
+  detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
       .execption("epoll_ctl remove_event");
 }
 
 void EPollPoller::unregister_fd(int fd) {
-  detail::system_call_value(epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr))
+  detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr))
       .execption("epoll_ctl unregister_fd");
 }
 

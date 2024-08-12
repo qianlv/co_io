@@ -20,6 +20,7 @@ TaskNoSuspend<void> echo(std::string_view ip, std::string_view port,
   std::array<char, 1024> buf;
   while (true) {
     auto ret = co_await stdin_file.async_read(buf.data(), buf.size());
+    std::cerr << ret.what() << std::endl;
     auto size = ret.value();
     if (size == 0) {
       break;

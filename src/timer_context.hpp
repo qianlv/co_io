@@ -20,18 +20,16 @@ class TimerContext {
 
 public:
   TimerContext(LoopBase *loop)
-      : clock_fd_(
-            detail::system_call_value<int>(::timerfd_create(CLOCK_MONOTONIC, 0))
-                .execption("timerfd_create"),
-            loop),
-        loop_(loop) {
+      : clock_fd_(detail::Execpted<int>(::timerfd_create(CLOCK_MONOTONIC, 0))
+                      .execption("timerfd_create"),
+                  loop) {
     poll_timer();
   }
 
   uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,
-                 std::coroutine_handle<> coroutine);
+                     std::coroutine_handle<> coroutine);
   uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,
-                 std::function<void()> callback);
+                     std::function<void()> callback);
 
   void cancel_timer(uint64_t id);
 
@@ -69,7 +67,7 @@ private:
   std::priority_queue<TimerEntry> timers_;
   std::unordered_set<uint64_t> cancel_timers_;
   AsyncFile clock_fd_;
-  LoopBase *loop_;
+  // LoopBase *loop_;
   uint32_t next_timer_id_ = 0;
 };
 
