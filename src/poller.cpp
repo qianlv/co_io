@@ -99,10 +99,11 @@ void EPollPoller::add_event(int fd, PollEvent event, callback handle) {
   if (event & PollEvent::write()) {
     ev.events |= EPOLLOUT;
   }
-  ev.data.ptr = new callback(std::move(handle));
+  ev.data.fd = fd;
 
   detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
       .execption("epoll_ctl add_event");
+  handles_.insert_or_assign(fd, std::move(handle));
 }
 
 void EPollPoller::remove_event(int fd, PollEvent) {
@@ -111,11 +112,13 @@ void EPollPoller::remove_event(int fd, PollEvent) {
   ev.data.ptr = nullptr;
   detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
       .execption("epoll_ctl remove_event");
+  handles_.erase(fd);
 }
 
 void EPollPoller::unregister_fd(int fd) {
   detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr))
       .execption("epoll_ctl unregister_fd");
+  handles_.erase(fd);
 }
 
 void EPollPoller::poll() {
@@ -126,9 +129,9 @@ void EPollPoller::poll() {
 
   for (unsigned long i = 0; i < static_cast<unsigned long>(n); ++i) {
     auto &ev = events_[i];
-    auto cb = reinterpret_cast<callback *>(ev.data.ptr);
-    cb->operator()();
-    delete cb;
+    if (auto it = handles_.find(ev.data.fd); it != handles_.end()) {
+      it->second();
+    }
   }
 }
 
