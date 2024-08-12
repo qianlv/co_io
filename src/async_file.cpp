@@ -44,13 +44,23 @@ AsyncFile::async_read(void *buf, size_t size) {
 }
 
 AsyncFile::FinalAwaiter<detail::Execpted<ssize_t>>
-AsyncFile::async_write(void *buf, size_t size) {
+AsyncFile::async_read(ByteBuffer &buf) {
+  return async_read(buf.data(), buf.size());
+}
+
+AsyncFile::FinalAwaiter<detail::Execpted<ssize_t>>
+AsyncFile::async_write(const void *buf, size_t size) {
   auto task = async_r<ssize_t>([fd = this->fd(), buf, size]() {
     return detail::system_call(::write(fd, buf, size));
   });
 
   loop_->poller()->add_event(this->fd(), PollEvent::write(), task.get_handle());
   return FinalAwaiter<detail::Execpted<ssize_t>>{std::move(task)};
+}
+
+AsyncFile::FinalAwaiter<detail::Execpted<ssize_t>>
+AsyncFile::async_write(std::string_view buf) {
+  return async_write(buf.data(), buf.size());
 }
 
 AsyncFile::FinalAwaiter<detail::Execpted<int>>

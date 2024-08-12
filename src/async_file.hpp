@@ -9,8 +9,8 @@
 #include <unistd.h>
 #include <utility>
 
-#include "poller.hpp"
 #include "system_call.hpp"
+#include "byte_buffer.hpp"
 
 namespace co_io {
 
@@ -162,7 +162,9 @@ public:
   explicit AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec = 0);
 
   FinalAwaiter<detail::Execpted<ssize_t>> async_read(void *buf, size_t size);
-  FinalAwaiter<detail::Execpted<ssize_t>> async_write(void *buf, size_t size);
+  FinalAwaiter<detail::Execpted<ssize_t>> async_read(ByteBuffer& buf);
+  FinalAwaiter<detail::Execpted<ssize_t>> async_write(const void *buf, size_t size);
+  FinalAwaiter<detail::Execpted<ssize_t>> async_write(std::string_view buf);
   FinalAwaiter<detail::Execpted<int>> async_accept(AddressSolver::Address &);
   FinalAwaiter<detail::Execpted<int>>
   async_connect(AddressSolver::Address const &addr);
