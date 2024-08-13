@@ -47,16 +47,16 @@ SelectPoller::SelectPoller() : PollerBase() {
 void SelectPoller::register_fd(int) { ; }
 
 void SelectPoller::unregister_fd(int fd) {
-  remove_event(fd, PollEvent::read_write());
+  remove_event(fd, PollEvent::read() | PollEvent::write());
 }
 
 void SelectPoller::add_event(int fd, PollEvent event, callback handle) {
   // std::cerr << "add_event " << fd << " " << event.raw() << std::endl;
   PollerBase::add_event(fd, event, handle);
-  if (event & PollEvent::read()) {
+  if (handles_.at(fd).event & PollEvent::read()) {
     FD_SET(fd, &read_set_);
   }
-  if (event & PollEvent::write()) {
+  if (handles_.at(fd).event & PollEvent::write()) {
     FD_SET(fd, &write_set_);
   }
   max_fd_ = std::max(max_fd_, fd);
@@ -84,21 +84,21 @@ void SelectPoller::poll() {
                                       nullptr, nullptr, nullptr))
               .execption("pselect");
 
-  std::cerr << "poll " << n << std::endl;
   if (n > 0) {
     for (auto it = handles_.begin(); it != handles_.end();) {
-      if (FD_ISSET(it->first, &read_set)) {
+      int fd = it->first;
+      if (FD_ISSET(fd, &read_set) && it->second.read_handle) {
         it->second.read_handle();
       }
-      if (FD_ISSET(it->first, &write_set)) {
+      if (FD_ISSET(fd, &write_set) && it->second.write_handle) {
         it->second.write_handle();
       }
 
-      if (it->second.event == PollEvent::none()) {
-        if (max_fd_ == it->first) {
+      if (!it->second.read_handle && !it->second.write_handle) {
+        it = handles_.erase(it);
+        if (max_fd_ == fd) {
           max_fd_ = -1;
         }
-        it = handles_.erase(it);
       } else {
         ++it;
       }

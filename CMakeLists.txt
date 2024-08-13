@@ -10,7 +10,7 @@ endif()
 set(COMPILE_FLAGS -Wall -Wextra -Werror -Werror=uninitialized -Werror=return-type -Wno-unused-parameter)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-      set(COMPILE_FLAGS ${COMPILE_FLAGS} -g -ggdb3 -O0)
+      set(COMPILE_FLAGS ${COMPILE_FLAGS} -g -ggdb3 -gdwarf-4 -O0)
 endif()
 
 add_compile_options(${COMPILE_FLAGS})
