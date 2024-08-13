@@ -53,13 +53,16 @@ public:
     callback write_handle = {};
   };
 
-  virtual void register_fd(int fd) = 0;
-  virtual void unregister_fd(int fd) = 0;
-  virtual void add_event(int fd, PollEvent event, callback handle) = 0;
-  virtual void remove_event(int fd, PollEvent event) = 0;
+  virtual void register_fd(int fd);
+  virtual void unregister_fd(int fd);
+  virtual void add_event(int fd, PollEvent event, callback handle);
+  virtual bool remove_event(int fd, PollEvent event);
   virtual void poll() = 0;
 
   virtual ~PollerBase() = default;
+
+protected:
+  std::unordered_map<int, PollerEvent> handles_;
 };
 
 class SelectPoller : public PollerBase {
@@ -67,16 +70,15 @@ public:
   SelectPoller();
 
   void register_fd(int) override;
-  void add_event(int fd, PollEvent event, callback handle) override;
-  void remove_event(int fd, PollEvent event) override;
   void unregister_fd(int fd) override;
+  void add_event(int fd, PollEvent event, callback handle) override;
+  bool remove_event(int fd, PollEvent event) override;
   void poll() override;
 
 private:
   fd_set read_set_;
   fd_set write_set_;
   int max_fd_ = 0;
-  std::unordered_map<int, PollerEvent> events_;
 };
 
 class EPollPoller : public PollerBase {
@@ -85,15 +87,14 @@ public:
   ~EPollPoller() override;
 
   void register_fd(int fd) override;
-  void add_event(int fd, PollEvent event, callback handle) override;
-  void remove_event(int fd, PollEvent event) override;
   void unregister_fd(int fd) override;
+  void add_event(int fd, PollEvent event, callback handle) override;
+  bool remove_event(int fd, PollEvent event) override;
   void poll() override;
 
 private:
   int epoll_fd_;
   std::array<struct epoll_event, 1024> events_{};
-  std::unordered_map<int, callback> handles_;
 };
 
 using PollerBasePtr = std::unique_ptr<PollerBase>;

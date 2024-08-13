@@ -15,9 +15,11 @@ AsyncFile::AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec)
 
 AsyncFile::FinalAwaiter<detail::Execpted<ssize_t>>
 AsyncFile::async_read(void *buf, size_t size) {
-  auto task = async_r<ssize_t>([fd = this->fd(), buf, size]() {
-    return detail::system_call(::read(fd, buf, size));
-  }, PollEvent::read());
+  auto task = async_r<ssize_t>(
+      [fd = this->fd(), buf, size]() {
+        return detail::system_call(::read(fd, buf, size));
+      },
+      PollEvent::read());
   auto task_handle = task.get_handle();
   uint32_t timer_id = 0;
   bool has_timer = false;
@@ -50,11 +52,12 @@ AsyncFile::async_read(ByteBuffer &buf) {
 
 AsyncFile::FinalAwaiter<detail::Execpted<ssize_t>>
 AsyncFile::async_write(const void *buf, size_t size) {
-  auto task = async_r<ssize_t>([fd = this->fd(), buf, size]() {
-    return detail::system_call(::write(fd, buf, size));
-  }, PollEvent::write());
+  auto task = async_r<ssize_t>(
+      [fd = this->fd(), buf, size]() {
+        return detail::system_call(::write(fd, buf, size));
+      },
+      PollEvent::write());
 
-  std::cerr << "async_write " << PollEvent::write().raw() << " " << PollEvent::read().raw() << std::endl;
   loop_->poller()->add_event(this->fd(), PollEvent::write(), task.get_handle());
   return FinalAwaiter<detail::Execpted<ssize_t>>{std::move(task)};
 }
@@ -66,18 +69,22 @@ AsyncFile::async_write(std::string_view buf) {
 
 AsyncFile::FinalAwaiter<detail::Execpted<int>>
 AsyncFile::async_accept(AddressSolver::Address &) {
-  auto task = async_r<int>([fd = this->fd()]() {
-    return detail::system_call(::accept(fd, nullptr, nullptr));
-  }, PollEvent::read());
+  auto task = async_r<int>(
+      [fd = this->fd()]() {
+        return detail::system_call(::accept(fd, nullptr, nullptr));
+      },
+      PollEvent::read());
   loop_->poller()->add_event(this->fd(), PollEvent::read(), task.get_handle());
   return FinalAwaiter<detail::Execpted<int>>{std::move(task)};
 }
 
 AsyncFile::FinalAwaiter<detail::Execpted<int>>
 AsyncFile::async_connect(AddressSolver::Address const &addr) {
-  auto task = async_r<int>([fd = this->fd(), &addr]() {
-    return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
-  }, PollEvent::write());
+  auto task = async_r<int>(
+      [fd = this->fd(), &addr]() {
+        return detail::system_call(::connect(fd, &addr.addr_, addr.len_));
+      },
+      PollEvent::write());
   loop_->poller()->add_event(this->fd(), PollEvent::write(), task.get_handle());
   return FinalAwaiter<detail::Execpted<int>>{std::move(task)};
 }
@@ -101,7 +108,8 @@ AsyncFile AsyncFile::bind(AddressSolver::AddressInfo const &addr,
 
 template <typename Ret>
 AsyncFile::TaskAsnyc<detail::Execpted<Ret>>
-AsyncFile::async_r(std::function<detail::Execpted<Ret>()> func, PollEvent event) {
+AsyncFile::async_r(std::function<detail::Execpted<Ret>()> func,
+                   PollEvent event) {
   while (true) {
     auto ret = co_await func;
     if (!ret.is_nonblocking_error()) {
@@ -113,7 +121,7 @@ AsyncFile::async_r(std::function<detail::Execpted<Ret>()> func, PollEvent event)
 
 AsyncFile::~AsyncFile() {
   if (fd() != -1) {
-    std::cerr << "~AsyncFile() " << fd() << std::endl;
+    // std::cerr << "~AsyncFile() " << fd() << std::endl;
     loop_->poller()->unregister_fd(fd());
   }
 }

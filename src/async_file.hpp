@@ -4,14 +4,15 @@
 #include <cstring>
 #include <fcntl.h>
 #include <functional>
+#include <iostream>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <utility>
 
 #include "byte_buffer.hpp"
-#include "system_call.hpp"
 #include "poller.hpp"
+#include "system_call.hpp"
 
 namespace co_io {
 
@@ -142,7 +143,10 @@ public:
         }
         caller_.resume();
       }
-      void unhandled_exception() { exception_ = std::current_exception(); }
+      void unhandled_exception() {
+        std::cerr << "unhandled exception" << std::endl;
+        exception_ = std::current_exception();
+      }
     };
 
     auto get_handle() const { return handle_; }

@@ -47,7 +47,6 @@ detail::Execpted<size_t> HttpPraser::parse(std::string_view data) {
 }
 
 int HttpPraser::on_message_complete(llhttp_t *parser) {
-  std::cerr << "on_message_complete " << parser->content_length << std::endl;
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
   if (parser->content_length == 0) {
     p->on_request_complete_(std::move(p->req));
@@ -96,7 +95,6 @@ int HttpPraser::on_header_field(llhttp_t *parser, const char *at,
 int HttpPraser::on_header_value(llhttp_t *parser, const char *at,
                                 size_t length) {
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
-  std::cerr << "on_header_value\n";
   if (p->last_header_field.empty()) {
     return -1;
   }
@@ -106,10 +104,8 @@ int HttpPraser::on_header_value(llhttp_t *parser, const char *at,
 }
 
 int HttpPraser::on_body(llhttp_t *parser, const char *at, size_t length) {
-  std::cerr << "on body " << std::string(at, length) << std::endl;
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
   p->req.body.append(at, length);
-  std::cerr << p->req.body.length() << " " << p->content_length << std::endl;
   if (p->req.body.size() == p->content_length) {
     p->on_request_complete_(std::move(p->req));
   }
@@ -117,27 +113,11 @@ int HttpPraser::on_body(llhttp_t *parser, const char *at, size_t length) {
 }
 
 int HttpPraser::on_reset(llhttp_t *parser) {
-  std::cerr << "on reset\n";
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
   p->last_header_field.clear();
   p->req.clear();
   p->content_length = 0;
   return 0;
 }
-
-// int HttpPraser::on_chunk_header(llhttp_t *parser) {
-//   std::cerr << "on_chunk_header\n";
-//   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
-//   std::cerr << parser->content_length << std::endl;
-//   p->content_length = parser->content_length;
-//   return 0;
-// }
-//
-// int HttpPraser::on_chunk_complete(llhttp_t *parser) {
-//   std::cerr << "on_chunk_complete\n";
-//   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
-//   (void)p;
-//   return 0;
-// }
 
 } // namespace co_io

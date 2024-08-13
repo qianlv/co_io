@@ -38,7 +38,7 @@ TaskNoSuspend<void> HttpServer<LoopType>::accept() {
   while (true) {
     AddressSolver::Address addr;
     int fd = co_await listener_.async_accept(addr);
-    std::cerr << "new connecton = " << fd << std::endl;
+    // std::cerr << "new connecton = " << fd << std::endl;
     client(fd);
   }
 }

@@ -14,7 +14,6 @@ TaskNoSuspend<void> client(AsyncFile async_file) {
   char buffer[512];
   while (true) {
     auto t = co_await async_file.async_read(buffer, 512);
-    // std::cerr << t.what() << std::endl;
     auto size = t.value();
     if (size == 0) {
       break;
