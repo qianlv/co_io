@@ -28,31 +28,13 @@ public:
   char *end() noexcept { return buf_.data() + buf_.size(); }
   const char *end() const noexcept { return buf_.data() + buf_.size(); }
 
-  std::span<char> span(size_t start, size_t len) {
+  std::string_view span(size_t start, size_t len) const {
     if (start > size()) {
       throw std::out_of_range("ByteBuffer::span");
     }
     len = std::min(len, size() - start);
-    return std::span{begin() + start, len};
+    return std::string_view{begin() + start, len};
   }
-
-  std::span<const char> span(size_t start, size_t len) const {
-    if (start > size()) {
-      throw std::out_of_range("ByteBuffer::span");
-    }
-    len = std::min(len, size() - start);
-    return std::span{begin() + start, len};
-  }
-
-  std::string_view string_view() const noexcept {
-    return {buf_.data(), buf_.size()};
-  }
-  const std::string_view string_view() noexcept {
-    return {buf_.data(), buf_.size()};
-  }
-
-  operator std::string_view() const noexcept { return string_view(); }
-  operator std::string_view() noexcept { return string_view(); }
 
   void append(std::string_view str) {
     buf_.insert(buf_.end(), str.begin(), str.end());

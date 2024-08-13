@@ -9,14 +9,15 @@
 #include <unistd.h>
 #include <utility>
 
-#include "system_call.hpp"
 #include "byte_buffer.hpp"
+#include "system_call.hpp"
 
 namespace co_io {
 
 class FileDescriptor {
 public:
   explicit FileDescriptor(int fd) : fd_(fd) {}
+  FileDescriptor() = default;
 
   int fd() const { return fd_; }
 
@@ -111,7 +112,7 @@ public:
       void await_suspend(std::coroutine_handle<>) const noexcept {}
       ret_type await_resume() const {
         if (task_handle_.promise().is_timeout) {
-          return ret_type{-1, ECANCELED};
+          return ret_type{std::error_code(ECANCELED, std::system_category())};
         }
         return func_();
       }
@@ -162,14 +163,16 @@ public:
   explicit AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec = 0);
 
   FinalAwaiter<detail::Execpted<ssize_t>> async_read(void *buf, size_t size);
-  FinalAwaiter<detail::Execpted<ssize_t>> async_read(ByteBuffer& buf);
-  FinalAwaiter<detail::Execpted<ssize_t>> async_write(const void *buf, size_t size);
+  FinalAwaiter<detail::Execpted<ssize_t>> async_read(ByteBuffer &buf);
+  FinalAwaiter<detail::Execpted<ssize_t>> async_write(const void *buf,
+                                                      size_t size);
   FinalAwaiter<detail::Execpted<ssize_t>> async_write(std::string_view buf);
   FinalAwaiter<detail::Execpted<int>> async_accept(AddressSolver::Address &);
   FinalAwaiter<detail::Execpted<int>>
   async_connect(AddressSolver::Address const &addr);
   static AsyncFile bind(AddressSolver::AddressInfo const &addr, LoopBase *loop);
 
+  AsyncFile() = default;
   AsyncFile(AsyncFile &&other) = default;
   AsyncFile &operator=(AsyncFile &&other) = default;
 
@@ -183,7 +186,7 @@ private:
   TaskAsnyc<detail::Execpted<Ret>>
   async_r(std::function<detail::Execpted<Ret>()> func);
 
-  LoopBase *loop_;
+  LoopBase *loop_ = nullptr;
   unsigned time_out_sec_ = 0;
 };
 

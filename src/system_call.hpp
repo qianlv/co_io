@@ -3,6 +3,7 @@
 #include <cstring>
 #include <sys/types.h>
 #include <system_error>
+#include <variant>
 
 namespace co_io {
 namespace detail {
@@ -11,49 +12,58 @@ template <typename T> class Execpted {
 public:
   explicit Execpted(T value) {
     if (value < 0) {
-      errno_ = errno;
+      value_ = std::error_code(errno, std::system_category());
     } else {
       value_ = value;
     }
   }
 
-  explicit Execpted(int, int err) : errno_(err) {}
+  explicit Execpted(std::error_code err) : value_(err) {}
 
   Execpted() = default;
   ~Execpted() = default;
 
   T value() const {
-    if (errno_ != 0) {
-      throw std::system_error(errno_, std::system_category());
+    if (std::holds_alternative<std::error_code>(value_)) {
+      throw std::system_error(std::get<std::error_code>(value_));
     }
-    return value_;
+    return std::get<T>(value_);
   }
-
-  T raw_value() const { return value_; }
 
   operator T() const { return value(); }
 
-  bool is_error() const noexcept { return value_ < 0 && errno_ != 0; }
-  bool is_error(int err) const noexcept { return value_ < 0 && errno_ == err; }
+  bool is_error() const noexcept {
+    return std::holds_alternative<std::error_code>(value_);
+  }
+  bool is_errno(int err) const noexcept {
+    if (std::holds_alternative<std::error_code>(value_)) {
+      return std::get<std::error_code>(value_) ==
+             std::error_code(err, std::system_category());
+    }
+    return false;
+  }
 
   T execption(const char *what) const {
-    if (errno_ != 0) {
-      throw std::system_error(errno_, std::system_category(), what);
+    if (std::holds_alternative<std::error_code>(value_)) {
+      throw std::system_error(std::get<std::error_code>(value_), what);
     }
-
-    return value_;
+    return std::get<T>(value_);
   }
 
   bool is_nonblocking_error() const noexcept {
-    return value_ < 0 && (errno_ == EAGAIN || errno_ == EINTR ||
-                          errno_ == EINPROGRESS || errno_ == EWOULDBLOCK);
+    return is_errno(EAGAIN) || is_errno(EINTR) || is_errno(EINPROGRESS) ||
+           is_errno(EWOULDBLOCK);
   }
 
-  const char *what() const noexcept { return strerror(errno_); }
+  std::string what() const noexcept {
+    if (std::holds_alternative<std::error_code>(value_)) {
+      return std::get<std::error_code>(value_).message();
+    }
+    return std::string("no error");
+  }
 
 private:
-  T value_ = {};
-  int errno_ = {};
+  std::variant<T, std::error_code> value_;
 };
 
 template <typename T> Execpted<T> system_call(T syscall) {

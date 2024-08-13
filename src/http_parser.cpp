@@ -1,131 +1,143 @@
 #include "http_parser.hpp"
 #include <functional>
+#include <iostream>
+#include <ostream>
+#include <stdexcept>
 
 namespace co_io {
-namespace {
-template <typename T> struct Callback;
+namespace {} // namespace
 
-template <typename Ret, typename... Params> struct Callback<Ret(Params...)> {
-  template <typename... Args> static Ret callback(Args... args) {
-    return func(args...);
-  }
-  static std::function<Ret(Params...)> func;
-};
-
-// Initialize the static member.
-template <typename Ret, typename... Params>
-std::function<Ret(Params...)> Callback<Ret(Params...)>::func;
-
-} // namespace
-
-HttpPraser::HttpPraser() {
+HttpPraser::HttpPraser(CallbackRequest on_request_complete)
+    : on_request_complete_(std::move(on_request_complete)) {
   llhttp_settings_init(&settings_);
   llhttp_init(&parser_, HTTP_REQUEST, &settings_);
+  parser_.data = this;
 
-#define SETUP_CB(fname)                                                        \
-  do {                                                                         \
-    Callback<int(llhttp_t *)>::func =                                          \
-        std::bind(&HttpPraser::fname, this, std::placeholders::_1);            \
-    settings_.fname = static_cast<decltype(settings_.fname)>(                  \
-        Callback<int(llhttp_t *)>::callback);                                  \
-  } while (1)
+  // settings_.on_message_complete = HttpPraser::on_headers_complete;
+  settings_.on_headers_complete = HttpPraser::on_message_complete;
+  settings_.on_reset = HttpPraser::on_reset;
+  // settings_.on_chunk_header = HttpPraser::on_chunk_header;
+  // settings_.on_chunk_header = HttpPraser::on_chunk_header;
 
-#define SETUP_DATA_CB(fname)                                                   \
-  do {                                                                         \
-    Callback<int(llhttp_t *, const char *, size_t)>::func =                    \
-        std::bind(&HttpPraser::fname, this, std::placeholders::_1,             \
-                  std::placeholders::_2, std::placeholders::_3);               \
-    settings_.fname = static_cast<decltype(settings_.fname)>(                  \
-        Callback<int(llhttp_t *, const char *, size_t)>::callback);            \
-  } while (1)
-
-  SETUP_CB(on_message_complete);
-  SETUP_CB(on_headers_complete);
-  SETUP_DATA_CB(on_url);
-  SETUP_DATA_CB(on_method);
-  SETUP_DATA_CB(on_version);
-  SETUP_DATA_CB(on_header_field);
-  SETUP_DATA_CB(on_header_value);
-  SETUP_DATA_CB(on_body);
-
-#undef SETUP_CB
-#undef SETUP_DATA_CB
+  settings_.on_url = HttpPraser::on_url;
+  settings_.on_method = HttpPraser::on_method;
+  settings_.on_version = HttpPraser::on_version;
+  settings_.on_status = HttpPraser::on_status;
+  settings_.on_header_field = HttpPraser::on_header_field;
+  settings_.on_header_value = HttpPraser::on_header_value;
+  settings_.on_body = HttpPraser::on_body;
 }
 
 HttpPraser::~HttpPraser() { llhttp_finish(&parser_); }
 
-size_t HttpPraser::parse(std::string_view data) {
+detail::Execpted<size_t> HttpPraser::parse(std::string_view data) {
   llhttp_errno_t error = llhttp_execute(&parser_, data.data(), data.size());
   switch (error) {
   case HPE_OK:
-    return data.size();
-  case HPE_PAUSED:
-  case HPE_PAUSED_UPGRADE:
-  case HPE_PAUSED_H2_UPGRADE:
-    return static_cast<size_t>(parser_.error_pos - data.data());
+    return detail::Execpted{data.size()};
+  // case HPE_PAUSED:
+  // case HPE_PAUSED_UPGRADE:
+  // case HPE_PAUSED_H2_UPGRADE:
+  //   return detail::Execpted(
+  //       static_cast<size_t>(parser_.error_pos - data.data()));
   default:
-    throw std::runtime_error(llhttp_get_error_reason(&parser_));
-    return 0;
+    return detail::Execpted<size_t>(
+        std::error_code{error, http_parser_category()});
   }
 }
 
-bool HttpPraser::is_paused() const { return paused_; }
-
-bool HttpPraser::is_finished() const { return finished_; }
-
-void HttpPraser::reset() {
-  llhttp_reset(&parser_);
-  finished_ = paused_ = false;
-  headers_.clear();
-  url_.clear();
-  method_.clear();
-  body_.clear();
-  version_.clear();
-  last_header_field_.clear();
-}
-
-int HttpPraser::on_message_complete(llhttp_t *) {
-  this->finished_ = true;
+int HttpPraser::on_message_complete(llhttp_t *parser) {
+  std::cerr << "on_message_complete " << parser->content_length << std::endl;
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  if (parser->content_length == 0) {
+    p->on_request_complete_(std::move(p->req));
+  } else {
+    p->content_length = parser->content_length;
+  }
   return 0;
 }
 
-int HttpPraser::on_headers_complete(llhttp_t *) {
-  paused_ = true;
-  return HPE_PAUSED;
-}
+// int HttpPraser::on_headers_complete(llhttp_t *parser) {
+//   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+//   return 0;
+// }
 
-int HttpPraser::on_url(llhttp_t *, const char *at, size_t length) {
-  url_ = std::string(at, length);
+int HttpPraser::on_url(llhttp_t *parser, const char *at, size_t length) {
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  p->req.url = std::string(at, length);
   return 0;
 }
 
-int HttpPraser::on_method(llhttp_t *, const char *at, size_t length) {
-  method_ = std::string(at, length);
+int HttpPraser::on_method(llhttp_t *parser, const char *at, size_t length) {
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  p->req.method = std::string(at, length);
   return 0;
 }
 
-int HttpPraser::on_version(llhttp_t *, const char *at, size_t length) {
-  version_ = std::string(at, length);
+int HttpPraser::on_version(llhttp_t *parser, const char *at, size_t length) {
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  p->req.version = std::string(at, length);
   return 0;
 }
 
-int HttpPraser::on_header_field(llhttp_t *, const char *at, size_t length) {
-  last_header_field_ = std::string(at, length);
+int HttpPraser::on_status(llhttp_t *, const char *, size_t) {
+  // HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  // p->req.status = std::string(at, length);
   return 0;
 }
 
-int HttpPraser::on_header_value(llhttp_t *, const char *at, size_t length) {
-  if (last_header_field_.empty()) {
+int HttpPraser::on_header_field(llhttp_t *parser, const char *at,
+                                size_t length) {
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  p->last_header_field = std::string(at, length);
+  return 0;
+}
+
+int HttpPraser::on_header_value(llhttp_t *parser, const char *at,
+                                size_t length) {
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  std::cerr << "on_header_value\n";
+  if (p->last_header_field.empty()) {
     return -1;
   }
-  headers_.insert_or_assign(std::move(last_header_field_),
-                            std::string(at, length));
+  p->req.headers.insert_or_assign(std::move(p->last_header_field),
+                                  std::string(at, length));
   return 0;
 }
 
-int HttpPraser::on_body(llhttp_t *, const char *at, size_t length) {
-  body_ = std::string(at, length);
+int HttpPraser::on_body(llhttp_t *parser, const char *at, size_t length) {
+  std::cerr << "on body " << std::string(at, length) << std::endl;
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  p->req.body.append(at, length);
+  std::cerr << p->req.body.length() << " " << p->content_length << std::endl;
+  if (p->req.body.size() == p->content_length) {
+    p->on_request_complete_(std::move(p->req));
+  }
   return 0;
 }
+
+int HttpPraser::on_reset(llhttp_t *parser) {
+  std::cerr << "on reset\n";
+  HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+  p->last_header_field.clear();
+  p->req.clear();
+  p->content_length = 0;
+  return 0;
+}
+
+// int HttpPraser::on_chunk_header(llhttp_t *parser) {
+//   std::cerr << "on_chunk_header\n";
+//   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+//   std::cerr << parser->content_length << std::endl;
+//   p->content_length = parser->content_length;
+//   return 0;
+// }
+//
+// int HttpPraser::on_chunk_complete(llhttp_t *parser) {
+//   std::cerr << "on_chunk_complete\n";
+//   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
+//   (void)p;
+//   return 0;
+// }
 
 } // namespace co_io

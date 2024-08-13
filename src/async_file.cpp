@@ -112,6 +112,7 @@ AsyncFile::async_r(std::function<detail::Execpted<Ret>()> func) {
 
 AsyncFile::~AsyncFile() {
   if (fd() != -1) {
+    std::cerr << "~AsyncFile() " << fd() << std::endl;
     loop_->poller()->unregister_fd(fd());
   }
 }

@@ -1,5 +1,4 @@
 #pragma once
-
 #include <coroutine>
 #include <exception>
 #include <iostream>
@@ -12,6 +11,8 @@ template <> struct Promise<void>;
 template <typename Ret = void> class TaskNoSuspend {
 public:
   using promise_type = Promise<Ret>;
+  TaskNoSuspend(std::coroutine_handle<promise_type> handle)
+      : m_handle(handle) {}
   TaskNoSuspend() = default;
   TaskNoSuspend(TaskNoSuspend &&other) = default;
   TaskNoSuspend &operator=(TaskNoSuspend &&other) = default;
@@ -19,31 +20,83 @@ public:
 
   TaskNoSuspend(const TaskNoSuspend &) = delete;
   TaskNoSuspend &operator=(const TaskNoSuspend &) = delete;
+
+  struct Awaiter {
+    std::coroutine_handle<promise_type> callee;
+    bool await_ready() { return false; }
+    void await_suspend(std::coroutine_handle<> caller) {
+      callee.promise().previous_handle_ = caller;
+    }
+    Ret await_resume() { return callee.promise().result(); }
+  };
+
+  Awaiter operator co_await() {
+    return Awaiter{m_handle};
+  }
+
+  std::coroutine_handle<promise_type> m_handle;
 };
 
 template <typename T> struct Promise {
   std::exception_ptr exception_;
   T return_value_;
-  std::coroutine_handle<> previous_handle_;
+  std::coroutine_handle<> previous_handle_ = nullptr;
   using handle_type = std::coroutine_handle<Promise>;
-  TaskNoSuspend<T> get_return_object() { return {}; }
+  TaskNoSuspend<T> get_return_object() {
+    return handle_type::from_promise(*this);
+  }
   std::suspend_never initial_suspend() { return {}; }
   std::suspend_never final_suspend() noexcept { return {}; }
-  void return_value(T value) noexcept { return_value_ = std::move(value); }
+  auto return_value(T value) noexcept {
+    return_value_ = std::move(value);
+    if (previous_handle_) {
+      previous_handle_.resume();
+    }
+  }
   void unhandled_exception() {
     std::cerr << "unhandled exception in coroutine\n";
-    std::rethrow_exception(std::current_exception());
+    exception_ = std::current_exception();
+    if (previous_handle_) {
+      previous_handle_.resume();
+    }
+  }
+
+  T result() {
+    if (exception_) {
+      std::rethrow_exception(exception_);
+    }
+    return return_value_;
   }
 };
 
 template <> struct Promise<void> {
-  TaskNoSuspend<void> get_return_object() { return TaskNoSuspend<void>{}; }
+  std::exception_ptr exception_;
+  std::coroutine_handle<> previous_handle_ = nullptr;
+  using handle_type = std::coroutine_handle<Promise<void>>;
+  TaskNoSuspend<void> get_return_object() {
+    return handle_type::from_promise(*this);
+  }
+
   std::suspend_never initial_suspend() { return {}; }
   std::suspend_never final_suspend() noexcept { return {}; }
-  void return_void() noexcept {}
+
+  void return_void() noexcept {
+    if (previous_handle_) {
+      previous_handle_.resume();
+    }
+  }
   void unhandled_exception() {
     std::cerr << "unhandled exception in coroutine\n";
-    std::rethrow_exception(std::current_exception());
+    exception_ = std::current_exception();
+    if (previous_handle_) {
+      previous_handle_.resume();
+    }
+  }
+
+  void result() {
+    if (exception_) {
+      std::rethrow_exception(exception_);
+    }
   }
 };
 
