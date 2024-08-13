@@ -13,15 +13,13 @@ namespace co_io {
 class PollEvent {
 private:
   unsigned int event;
-  constexpr PollEvent(unsigned int event) : event(event) {}
+  constexpr PollEvent(unsigned int ev) : event(ev) {}
   constexpr PollEvent() : event(0) {}
 
 public:
   constexpr PollEvent operator&(PollEvent rhs) const {
     return event & rhs.event;
   }
-
-  constexpr operator bool() const { return event != 0; }
 
   constexpr PollEvent operator|(PollEvent rhs) const {
     return PollEvent(event | rhs.event);
@@ -31,13 +29,15 @@ public:
     return PollEvent(event ^ rhs.event);
   }
 
+  constexpr operator bool() const noexcept { return event != 0; }
+
   bool operator==(PollEvent rhs) const { return event == rhs.event; }
 
   constexpr PollEvent operator~() const { return PollEvent(~event); }
 
-  static constexpr PollEvent none() { return PollEvent(); }
-  static constexpr PollEvent read() { return PollEvent(1 << 0); }
-  static constexpr PollEvent write() { return PollEvent(1 << 1); }
+  static constexpr PollEvent none() { return PollEvent(0); }
+  static constexpr PollEvent read() { return PollEvent(1); }
+  static constexpr PollEvent write() { return PollEvent(2); }
   static constexpr PollEvent read_write() { return read() | write(); }
 
   constexpr unsigned int raw() const { return event; }
@@ -49,7 +49,8 @@ public:
   struct PollerEvent {
     int fd;
     PollEvent event;
-    callback handle;
+    callback read_handle = {};
+    callback write_handle = {};
   };
 
   virtual void register_fd(int fd) = 0;

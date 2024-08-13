@@ -11,6 +11,7 @@
 
 #include "byte_buffer.hpp"
 #include "system_call.hpp"
+#include "poller.hpp"
 
 namespace co_io {
 
@@ -184,7 +185,7 @@ public:
 private:
   template <typename Ret>
   TaskAsnyc<detail::Execpted<Ret>>
-  async_r(std::function<detail::Execpted<Ret>()> func);
+  async_r(std::function<detail::Execpted<Ret>()> func, PollEvent event);
 
   LoopBase *loop_ = nullptr;
   unsigned time_out_sec_ = 0;

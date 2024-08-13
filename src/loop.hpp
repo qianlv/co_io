@@ -16,7 +16,7 @@ public:
 
 template <typename POLLER> class Loop : public LoopBase {
 public:
-  Loop(size_t count = 0);
+  Loop(size_t count = 50);
 
   PollerBase *poller() const override { return poller_.get(); }
   TimerContext *timer() const override { return timer_.get(); }

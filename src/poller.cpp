@@ -1,5 +1,6 @@
 #include "poller.hpp"
 #include "system_call.hpp"
+#include <iostream>
 namespace co_io {
 
 SelectPoller::SelectPoller() : PollerBase() {
@@ -10,32 +11,38 @@ SelectPoller::SelectPoller() : PollerBase() {
 void SelectPoller::register_fd(int) { ; }
 
 void SelectPoller::add_event(int fd, PollEvent event, callback handle) {
-  if (auto it = events_.find(fd); it != events_.end()) {
+  std::cerr << "add_event " << fd << " " << event.raw() << std::endl;
+  auto it = events_.find(fd);
+  if (it != events_.end()) {
     it->second.event = it->second.event | event;
-    it->second.handle = handle;
   } else {
-    events_.emplace_hint(
-        it, fd,
-        PollerEvent{.fd = fd, .event = event, .handle = std::move(handle)});
+    it = events_.emplace_hint(it, fd, PollerEvent{.fd = fd, .event = event});
     max_fd_ = std::max(max_fd_, fd);
   }
 
   if (event & PollEvent::read()) {
     FD_SET(fd, &read_set_);
+    it->second.read_handle = handle;
   }
   if (event & PollEvent::write()) {
+    std::cerr << "add write\n";
     FD_SET(fd, &write_set_);
+    it->second.write_handle = handle;
   }
 }
 
 void SelectPoller::remove_event(int fd, PollEvent event) {
+  std::cerr << "remove_event " << fd << " " << event.raw() << std::endl;
   if (auto it = events_.find(fd); it != events_.end()) {
     it->second.event = it->second.event & (~event);
     if (event & PollEvent::read()) {
       FD_CLR(fd, &read_set_);
+      it->second.read_handle = {};
     }
     if (event & PollEvent::write()) {
+      std::cerr << "remove write\n";
       FD_CLR(fd, &write_set_);
+      it->second.write_handle = {};
     }
   }
 }
@@ -52,10 +59,14 @@ void SelectPoller::poll() {
                                       nullptr, nullptr, nullptr))
               .execption("pselect");
 
+  std::cerr << "poll " << n << std::endl;
   if (n > 0) {
     for (auto it = events_.begin(); it != events_.end();) {
-      if (FD_ISSET(it->first, &read_set) || FD_ISSET(it->first, &write_set)) {
-        it->second.handle();
+      if (FD_ISSET(it->first, &read_set)) {
+        it->second.read_handle();
+      }
+      if (FD_ISSET(it->first, &write_set)) {
+        it->second.write_handle();
       }
 
       if (it->second.event == PollEvent::none()) {
@@ -93,10 +104,10 @@ void EPollPoller::register_fd(int fd) {
 void EPollPoller::add_event(int fd, PollEvent event, callback handle) {
   struct epoll_event ev;
   ev.events = EPOLLERR | EPOLLET;
-  if (event & PollEvent::read()) {
+  if ((event & PollEvent::read()).raw() > 0) {
     ev.events |= EPOLLIN;
   }
-  if (event & PollEvent::write()) {
+  if ((event & PollEvent::write()).raw() > 0) {
     ev.events |= EPOLLOUT;
   }
   ev.data.fd = fd;
