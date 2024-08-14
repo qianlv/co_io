@@ -18,14 +18,10 @@ TaskNoSuspend<void> HttpConnection::handle() {
 }
 
 TaskNoSuspend<void> HttpConnection::handle_request(HttpRequest req) {
-  std::string response = "HTTP/1.1 200 OK\r\n";
-  std::string body =
-      req.body.empty() ? "你好，你的请求正文为空哦" : std::move(req.body);
-  response.append("Content-Length: ");
-  response.append(std::to_string(body.size()));
-  response.append("\r\n\r\n");
-  response.append(body);
-  auto ret = co_await conn_.async_write(response);
+  auto response = router_.handle(std::move(req));
+  ByteBuffer buf;
+  response.serialize(buf);
+  auto ret = co_await conn_.async_write(buf);
   if (ret.is_error() || !req.keep_alive()) {
     stop = true;
   }

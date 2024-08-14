@@ -2,6 +2,7 @@
 
 #include "async_file.hpp"
 #include "http_connection.hpp"
+#include "http_router.hpp"
 #include "loop.hpp"
 #include "task.hpp"
 #include <memory>
@@ -18,9 +19,12 @@ public:
     loop_->run();
   }
 
+  HttpRouter &route() { return router_; }
+
 private:
   std::unique_ptr<LoopBase> loop_;
   AsyncFile listener_;
+  HttpRouter router_;
   unsigned int time_out_sec_ = 0;
 
   TaskNoSuspend<void> accept();
@@ -47,7 +51,7 @@ TaskNoSuspend<void> HttpServer<LoopType>::accept() {
 
 template <typename LoopType>
 TaskNoSuspend<void> HttpServer<LoopType>::client(int fd) {
-  HttpConnection conn(AsyncFile{fd, loop_.get(), time_out_sec_});
+  HttpConnection conn(AsyncFile{fd, loop_.get(), time_out_sec_}, router_);
   co_await conn.handle();
   co_return;
 }

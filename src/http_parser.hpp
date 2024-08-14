@@ -1,12 +1,13 @@
 #pragma once
 
+#include "http_util.hpp"
 #include "llhttp.h"
 #include "system_call.hpp"
 #include "task.hpp"
+
 #include <functional>
 #include <string>
 #include <system_error>
-#include <unordered_map>
 
 namespace co_io {
 
@@ -18,34 +19,6 @@ inline std::error_category const &http_parser_category() {
     }
   } instance;
   return instance;
-};
-
-struct HttpRequest {
-  std::unordered_map<std::string, std::string> headers;
-  std::string url;
-  std::string method;
-  std::string body;
-  std::string version;
-
-  bool keep_alive() const {
-    auto it = headers.find("Connection");
-    if (it != headers.end()) {
-      return it->second == "keep-alive";
-    }
-
-    if (version == "HTTP/1.0") {
-      return false;
-    }
-    return true;
-  }
-
-  void clear() {
-    headers.clear();
-    url.clear();
-    method.clear();
-    body.clear();
-    version.clear();
-  }
 };
 
 class HttpPraser {

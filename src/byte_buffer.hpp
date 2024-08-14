@@ -36,6 +36,8 @@ public:
     return std::string_view{begin() + start, len};
   }
 
+  operator std::string_view() const { return span(0, size()); }
+
   void append(std::string_view str) {
     buf_.insert(buf_.end(), str.begin(), str.end());
   }

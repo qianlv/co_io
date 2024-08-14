@@ -30,9 +30,7 @@ public:
     Ret await_resume() { return callee.promise().result(); }
   };
 
-  Awaiter operator co_await() {
-    return Awaiter{m_handle};
-  }
+  Awaiter operator co_await() { return Awaiter{m_handle}; }
 
   std::coroutine_handle<promise_type> m_handle;
 };
@@ -48,7 +46,12 @@ template <typename T> struct Promise {
   std::suspend_never initial_suspend() { return {}; }
   std::suspend_never final_suspend() noexcept { return {}; }
   auto return_value(T value) noexcept {
+    // std::cerr << "this " << handle_type::from_promise(*this).address()
+    //           << std::endl;
+    // std::cerr << "return value: " << std::endl;
     return_value_ = std::move(value);
+    // std::cerr << "previous_handle_ " << previous_handle_.address() <<
+    // std::endl;
     if (previous_handle_) {
       previous_handle_.resume();
     }
