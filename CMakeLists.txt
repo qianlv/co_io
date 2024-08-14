@@ -30,9 +30,6 @@ include_directories(${llhttp_SOURCE_DIR}/include)
 # Link with the llhttp_static target
 target_link_libraries(co_io llhttp_static)
 
-find_package(spdlog CONFIG REQUIRED)
-target_link_libraries(co_io spdlog::spdlog spdlog::spdlog_header_only)
-
 macro(add_exec source name)
       add_executable(${name} ${source}/${name}.cpp)
       target_link_libraries(${name} co_io)
@@ -40,8 +37,6 @@ macro(add_exec source name)
 endmacro()
 
 add_exec(examples echo_server)
-add_exec(examples echo_client)
 add_exec(examples timers)
 add_exec(examples http_parser_test)
-add_exec(examples test)
 add_exec(examples http)
