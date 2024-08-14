@@ -20,7 +20,7 @@ public:
     if (it != routes_.end()) {
       return it->second(std::move(req));
     }
-    return HttpResponse{}; // 404
+    return HttpResponse{404}; // 404
   }
 
 private:
