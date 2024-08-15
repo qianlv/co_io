@@ -35,13 +35,25 @@ cmake --build build
 
 ## Bench
 
+### environment
+
+OS: Ubuntu 22.04.4 LTS on Windows 10 x86_64
+Kernel: 5.15.153.1-microsoft-standard-WSL2
+CPU: AMD Ryzen 7 3700X (16) @ 3.600GHz
+Memory: 16GB
+
+### Tool
+
+[wrk](https://github.com/wg/wrk)
+
+### Command
+
 ```
 ./build/http
 wrk -t8 -c1000 http://127.0.0.1:12345/
-
 ```
 
-Result:
+### Result
 
 ```
   Thread Stats   Avg      Stdev     Max   +/- Stdev

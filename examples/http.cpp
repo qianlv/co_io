@@ -9,7 +9,7 @@ int main() {
     co_io::HttpResponse res{200};
     res.headers["Content-Type"] = "text/plain;charset=utf-8";
     res.headers["Connection"] = "keep-alive";
-    res.body = "Hello World!";
+    res.body = "<h1>Hello World! Hello World! Hello World! Hello World! Hello World! Hello World! </h1>";
     return res;
   });
   http.start();
