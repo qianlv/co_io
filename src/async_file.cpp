@@ -1,7 +1,6 @@
 #include "async_file.hpp"
 #include "loop.hpp"
 #include "system_call.hpp"
-#include <iostream>
 
 namespace co_io {
 
@@ -74,7 +73,9 @@ AsyncFile::async_accept(AddressSolver::Address &) {
         return detail::system_call(::accept(fd, nullptr, nullptr));
       },
       PollEvent::read());
-  loop_->poller()->add_event(this->fd(), PollEvent::read(), task.get_handle());
+  loop_->poller()->add_event(this->fd(),
+                             PollEvent::read(),
+                             task.get_handle());
   return FinalAwaiter<detail::Execpted<int>>{std::move(task)};
 }
 
@@ -91,19 +92,22 @@ AsyncFile::async_connect(AddressSolver::Address const &addr) {
 
 AsyncFile AsyncFile::bind(AddressSolver::AddressInfo const &addr,
                           LoopBase *loop) {
-  auto async_file = AsyncFile(addr.create_socket(), loop);
-  AddressSolver::Address serve = addr.get_address();
-  int on = 1;
-  detail::system_call(
-      setsockopt(async_file.fd(), SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
-      .execption("setsockopt");
-  detail::system_call(
-      setsockopt(async_file.fd(), SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)))
-      .execption("setsockopt");
-  detail::system_call(::bind(async_file.fd(), &serve.addr_, serve.len_))
-      .execption("bind");
-  detail::system_call(::listen(async_file.fd(), SOMAXCONN)).execption("listen");
+  int fd = AsyncFile::create_listen(addr);
+  auto async_file = AsyncFile(fd, loop);
   return async_file;
+}
+
+int AsyncFile::create_listen(AddressSolver::AddressInfo const &addr) {
+  AddressSolver::Address serve = addr.get_address();
+  int fd = addr.create_socket();
+  int on = 1;
+  detail::system_call(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
+      .execption("setsockopt");
+  detail::system_call(setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)))
+      .execption("setsockopt");
+  detail::system_call(::bind(fd, &serve.addr_, serve.len_)).execption("bind");
+  detail::system_call(::listen(fd, SOMAXCONN)).execption("listen");
+  return fd;
 }
 
 template <typename Ret>
@@ -113,6 +117,7 @@ AsyncFile::async_r(std::function<detail::Execpted<Ret>()> func,
   while (true) {
     auto ret = co_await func;
     if (!ret.is_nonblocking_error()) {
+      // std::cerr << "AsyncFile::async_r() " << ret.what() << std::endl;
       loop_->poller()->remove_event(fd(), event);
       co_return ret;
     }

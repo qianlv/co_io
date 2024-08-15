@@ -88,9 +88,11 @@ template <> struct Promise<void> {
       previous_handle_.resume();
     }
   }
+
   void unhandled_exception() {
-    std::cerr << "unhandled exception in coroutine\n";
+    std::cerr << "unhandled exception in coroutine void\n";
     exception_ = std::current_exception();
+    std::rethrow_exception(exception_);
     if (previous_handle_) {
       previous_handle_.resume();
     }

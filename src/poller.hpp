@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <coroutine>
 #include <functional>
 #include <memory>
 #include <sys/epoll.h>
@@ -36,9 +35,10 @@ public:
   constexpr PollEvent operator~() const { return PollEvent(~event); }
 
   static constexpr PollEvent none() { return PollEvent(0); }
-  static constexpr PollEvent read() { return PollEvent(1); }
-  static constexpr PollEvent write() { return PollEvent(2); }
+  static constexpr PollEvent read() { return PollEvent(1 << 0); }
+  static constexpr PollEvent write() { return PollEvent(1 << 1); }
   static constexpr PollEvent read_write() { return read() | write(); }
+  static constexpr PollEvent exclusive() { return PollEvent(1 << 2); }
 
   constexpr unsigned int raw() const { return event; }
 };

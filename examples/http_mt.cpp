@@ -3,6 +3,7 @@
 
 int main() {
   co_io::HttpServer<co_io::EPollLoop> http("localhost", "12345");
+  http.with_threads();
   // co_io::HttpServer<co_io::SelectLoop> http("localhost", "12345");
   http.route().route("/", [](co_io::HttpRequest req) -> co_io::HttpResponse {
     (void)req;

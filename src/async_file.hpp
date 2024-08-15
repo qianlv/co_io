@@ -176,6 +176,7 @@ public:
   FinalAwaiter<detail::Execpted<int>>
   async_connect(AddressSolver::Address const &addr);
   static AsyncFile bind(AddressSolver::AddressInfo const &addr, LoopBase *loop);
+  static int create_listen(AddressSolver::AddressInfo const &addr);
 
   AsyncFile() = default;
   AsyncFile(AsyncFile &&other) = default;

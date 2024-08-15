@@ -31,5 +31,6 @@ int main() {
              "TEST: 3\r\n"
              "\r\n";
   parser.parse(request);
+  parser.parse("POST /index.html?key=value HTTP/1.1\r\n\r\n");
   return 0;
 }
