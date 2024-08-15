@@ -1,9 +1,11 @@
 # CO_IO
 
 ## Overview
+
 Network libaray with c++20 coroutines
 
 ## Compiler
+
 ```
 cmake -B build
 cmake --build build
@@ -19,6 +21,7 @@ cmake --build build
 ## TODO
 
 1. HTTPS
+2. Multithread
 
 ## Dependencies
 
@@ -26,6 +29,25 @@ cmake --build build
 2. [llhttp](https://github.com/nodejs/llhttp)
 
 ## Example
+
 [Echo server](./example/echo_server.cpp)
 [Http server](./example/http_server.cpp)
 
+## Bench
+
+```
+./build/http
+wrk -t8 -c1000 http://127.0.0.1:12345/
+
+```
+
+Result:
+
+```
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    39.94ms   99.67ms   1.99s    98.56%
+    Req/Sec     3.76k   564.92     6.20k    76.14%
+  296551 requests in 10.06s, 53.73MB read
+Requests/sec:  29482.71
+Transfer/sec:      5.34MB
+```

@@ -27,8 +27,8 @@ void TimerContext::cancel_timer(uint64_t id) { cancel_timers_.insert(id); }
 
 void TimerContext::reset() {
   while (!cancel_timers_.empty() && !timers_.empty()) { // remove cancel timer
-    auto it = cancel_timers_.find(timers_.top().id);
-    if (it != cancel_timers_.end()) {
+    if (auto it = cancel_timers_.find(timers_.top().id);
+        it != cancel_timers_.end()) {
       timers_.pop();
       cancel_timers_.erase(it);
     } else {

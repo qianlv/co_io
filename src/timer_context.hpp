@@ -67,7 +67,6 @@ private:
   std::priority_queue<TimerEntry> timers_;
   std::unordered_set<uint64_t> cancel_timers_;
   AsyncFile clock_fd_;
-  // LoopBase *loop_;
   uint32_t next_timer_id_ = 0;
 };
 
