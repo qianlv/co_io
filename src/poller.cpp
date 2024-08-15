@@ -139,9 +139,6 @@ void EPollPoller::add_event(int fd, PollEvent event, callback handle) {
   if (handles_.at(fd).event & PollEvent::write()) {
     ev.events |= EPOLLOUT;
   }
-  if (handles_.at(fd).event & PollEvent::exclusive()) {
-    ev.events |= EPOLLEXCLUSIVE;
-  }
   ev.data.fd = fd;
 
   detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
@@ -158,9 +155,6 @@ bool EPollPoller::remove_event(int fd, PollEvent event) {
     }
     if (handles_.at(fd).event & PollEvent::write()) {
       ev.events |= EPOLLOUT;
-    }
-    if (handles_.at(fd).event & PollEvent::exclusive()) {
-      ev.events |= EPOLLEXCLUSIVE;
     }
     ev.data.fd = fd;
     detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))

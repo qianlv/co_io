@@ -12,9 +12,14 @@ namespace co_io {
 
 template <typename LoopType> class HttpWorker {
 public:
-  HttpWorker(int accept_fd, HttpRouter &router, unsigned int time_out_sec)
-      : loop_(std::make_unique<LoopType>()), listener_(accept_fd, loop_.get()),
-        router_(router), time_out_sec_(time_out_sec) {}
+  HttpWorker(std::string_view ip, std::string_view port, HttpRouter &router,
+             unsigned int time_out_sec)
+      : loop_(std::make_unique<LoopType>()), router_(router),
+        time_out_sec_(time_out_sec) {
+    AddressSolver solver{ip, port};
+    AddressSolver::AddressInfo info = solver.get_address_info();
+    listener_ = AsyncFile::bind(info, loop_.get());
+  }
 
   void start(bool new_thread) {
     if (new_thread) {
@@ -28,7 +33,7 @@ public:
     }
   }
 
-  ~HttpWorker() { std::cerr << "~HttpWorker()\n"; }
+  ~HttpWorker() {}
 
   HttpWorker(const HttpWorker &) = delete;
   HttpWorker &operator=(const HttpWorker &) = delete;
@@ -50,19 +55,23 @@ private:
 };
 
 template <typename LoopType> class HttpServer {
+  using WorkerType = HttpWorker<LoopType>;
+  using WorkerTypePointer = std::unique_ptr<WorkerType>;
 
 public:
   HttpServer(std::string_view ip, std::string port);
 
   void start() {
     for (unsigned i = 0; i + 1 < nthreads_; ++i) {
-      workers_.emplace_back(listener_fd_, router_, time_out_sec_);
+      workers_.push_back(
+          std::make_unique<WorkerType>(ip_, port_, router_, time_out_sec_));
     }
     for (auto &worker : workers_) {
-      worker.start(true);
+      worker->start(true);
     }
-    HttpWorker<LoopType> worker{listener_fd_, router_, time_out_sec_};
-    worker.start(false);
+    WorkerTypePointer worker =
+        std::make_unique<WorkerType>(ip_, port_, router_, time_out_sec_);
+    worker->start(false);
   }
 
   HttpRouter &route() { return router_; }
@@ -79,19 +88,16 @@ public:
   }
 
 private:
-  int listener_fd_;
+  std::string ip_, port_;
   HttpRouter router_;
   unsigned int time_out_sec_ = 0;
   unsigned int nthreads_ = 1;
-  std::vector<HttpWorker<LoopType>> workers_;
+  std::vector<WorkerTypePointer> workers_;
 };
 
 template <typename LoopType>
-HttpServer<LoopType>::HttpServer(std::string_view ip, std::string port) {
-  AddressSolver solver{ip, port};
-  AddressSolver::AddressInfo info = solver.get_address_info();
-  listener_fd_ = AsyncFile::create_listen(info);
-}
+HttpServer<LoopType>::HttpServer(std::string_view ip, std::string port)
+    : ip_(ip), port_(port) {}
 
 template <typename LoopType>
 TaskNoSuspend<void> HttpWorker<LoopType>::accept() {
@@ -100,9 +106,8 @@ TaskNoSuspend<void> HttpWorker<LoopType>::accept() {
     auto ret = co_await listener_.async_accept(addr);
     if (ret.is_error()) {
       std::cerr << "accept error " << ret.what() << std::endl;
-    } else {
-      client(ret.value());
     }
+    client(ret.value());
   }
 }
 

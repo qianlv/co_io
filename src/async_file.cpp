@@ -73,9 +73,7 @@ AsyncFile::async_accept(AddressSolver::Address &) {
         return detail::system_call(::accept(fd, nullptr, nullptr));
       },
       PollEvent::read());
-  loop_->poller()->add_event(this->fd(),
-                             PollEvent::read(),
-                             task.get_handle());
+  loop_->poller()->add_event(this->fd(), PollEvent::read(), task.get_handle());
   return FinalAwaiter<detail::Execpted<int>>{std::move(task)};
 }
 
