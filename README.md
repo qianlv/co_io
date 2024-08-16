@@ -22,6 +22,8 @@ cmake --build build
 ## TODO
 
 1. HTTPS
+2. Notification queue with Coroutine, Notification queue is suspend at the condition variable, it's conflict with Coroutine.
+3. Using radix tree to support path routing
 
 ## Dependencies
 
@@ -46,7 +48,6 @@ Memory: 16GB
 ### Tool
 
 [wrk](https://github.com/wg/wrk)
-
 
 ### Command
 
