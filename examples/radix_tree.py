@@ -22,9 +22,9 @@ class RadixTreeNode:
     def debug(self, k, width=0):
         s = ""
         if k:
-            s = " " * width + f"{k} -> " + self.prefix
+            s = " " * width + f"{k} -> " + self.prefix[1:]
         else:
-            s = " " * width + self.prefix
+            s = " " * width + self.prefix[1:]
         s += "[" + "".join(self.childs.keys()) + "]" if self.childs else ""
         print(s)
         for k, c in self.childs.items():
@@ -49,7 +49,7 @@ class RadixTree:
                 current_remaining
             ):  # two case, first case: abcd, abcef -> abc, d, ef. second case: abcde, abcd -> abcd, e, ""
                 new_node = current.clone()
-                new_node.prefix = current_remaining[1:]
+                new_node.prefix = current_remaining
 
                 current.prefix = common_prefix
                 current.childs.clear()
@@ -57,7 +57,7 @@ class RadixTree:
                 if word_remaining:  # first case
                     current.is_key = False
                     current.childs[word_remaining[0]] = RadixTreeNode(
-                        word_remaining[1:], True
+                        word_remaining, True
                     )
             elif (
                 not current_remaining
@@ -66,30 +66,33 @@ class RadixTree:
 
             if word_remaining and word_remaining[0] not in current.childs:
                 current.childs[word_remaining[0]] = RadixTreeNode(
-                    word_remaining[1:], True
+                    word_remaining, True
                 )
 
-            if not word_remaining[1:]:
+            if not word_remaining:
                 break
 
             current = current.childs[word_remaining[0]]
-            word = word_remaining[1:]
+            word = word_remaining
 
     def search(self, word):
         current = self.root
 
         while True:
-            _, current_remaining, word_remaining = current.match(word)
-            if not current_remaining and not word_remaining and current.is_key:
-                return True
-
-            if not word_remaining or word_remaining[0] not in current.childs:
+            common_prefix, current_remaining, word_remaining = current.match(word)
+            print(
+                f"common_prefix = {common_prefix}, current_remaining = {current_remaining}, word_remaining = {word_remaining}"
+            )
+            if current_remaining:
                 return False
-
+            if not word_remaining:
+                return current.is_key
+            if word_remaining[0] not in current.childs:
+                return False
             current = current.childs[word_remaining[0]]
-            word = word_remaining[1:]
+            word = word_remaining
+            
 
-        return False
 
     def debug(self):
         self.root.debug("")
@@ -150,7 +153,6 @@ def test5():
         "alligator",
         "alien",
         "baloon",
-        "ba",
         "chromodynamic",
         "romane",
         "romanus",
@@ -161,20 +163,25 @@ def test5():
         "rubicundus",
         "all",
         "rub",
+        "ba",
     ]
     tree = RadixTree()
     for word in words[:]:
         tree.insert(word)
-    tree.debug()
+        tree.debug()
+    # tree.debug()
+    print(tree.search("ba"))
+    print(tree.search("all"))
+    print(tree.search("alligator"))
 
 
 if __name__ == "__main__":
-    test1()
-    print("------------")
-    test2()
-    print("------------")
-    test3()
-    print("------------")
-    test4()
-    print("------------")
+    # test1()
+    # print("------------")
+    # test2()
+    # print("------------")
+    # test3()
+    # print("------------")
+    # test4()
+    # print("------------")
     test5()
