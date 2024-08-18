@@ -1,3 +1,4 @@
+import random
 from typing import Tuple
 
 
@@ -19,16 +20,11 @@ class RadixTreeNode:
         node.childs = self.childs.copy()
         return node
 
-    def debug(self, k, width=0):
-        s = ""
-        if k:
-            s = " " * width + f"{k} -> " + self.prefix[1:]
-        else:
-            s = " " * width + self.prefix[1:]
-        s += "[" + "".join(self.childs.keys()) + "]" if self.childs else ""
+    def debug(self, width=0):
+        s = " " * width + self.prefix + f"({'l' if self.is_key else 'n'})"
         print(s)
-        for k, c in self.childs.items():
-            c.debug(k, len(s))
+        for _, c in self.childs.items():
+            c.debug(len(s))
 
 
 class RadixTree:
@@ -41,9 +37,9 @@ class RadixTree:
         while True:
             common_prefix, current_remaining, word_remaining = current.match(word)
 
-            print(
-                f"common_prefix = {common_prefix}, current_remaining = {current_remaining}, word_remaining = {word_remaining}"
-            )
+            # print(
+            #     f"common_prefix = {common_prefix}, current_remaining = {current_remaining}, word_remaining = {word_remaining}"
+            # )
 
             if (
                 current_remaining
@@ -64,25 +60,25 @@ class RadixTree:
             ):  # two case, first case: abcd, abcdef -> abcd, "", ef, second case: abcd, abcd -> abcd, "", ""
                 pass
 
-            if word_remaining and word_remaining[0] not in current.childs:
-                current.childs[word_remaining[0]] = RadixTreeNode(
-                    word_remaining, True
-                )
-
             if not word_remaining:
                 break
 
+            if word_remaining and word_remaining[0] not in current.childs:
+                current.childs[word_remaining[0]] = RadixTreeNode(word_remaining, True)
+
             current = current.childs[word_remaining[0]]
             word = word_remaining
+
+        current.is_key = True
 
     def search(self, word):
         current = self.root
 
         while True:
-            common_prefix, current_remaining, word_remaining = current.match(word)
-            print(
-                f"common_prefix = {common_prefix}, current_remaining = {current_remaining}, word_remaining = {word_remaining}"
-            )
+            _, current_remaining, word_remaining = current.match(word)
+            # print(
+            #     f"common_prefix = {common_prefix}, current_remaining = {current_remaining}, word_remaining = {word_remaining}"
+            # )
             if current_remaining:
                 return False
             if not word_remaining:
@@ -91,11 +87,48 @@ class RadixTree:
                 return False
             current = current.childs[word_remaining[0]]
             word = word_remaining
-            
 
+    def remove(self, word):
+        stacks = []
+        current = self.root
+
+        while True:
+            stacks.append(current)
+            _, current_remaining, word_remaining = current.match(word)
+            if current_remaining:
+                return False
+            if not word_remaining:
+                if current.is_key:
+                    break
+                else:
+                    return False
+            if word_remaining[0] not in current.childs:
+                return False
+
+            current = current.childs[word_remaining[0]]
+            word = word_remaining
+
+
+        # print(", ".join(s.prefix for s in stacks))
+
+        if not current.childs:
+            parent = stacks[-2]
+            parent.childs.pop(current.prefix[0])
+            stacks.pop()
+        else:
+            current.is_key = False
+
+        while stacks:
+            parent = stacks.pop()
+            if len(parent.childs) > 1 or parent == self.root:
+                break
+            current, *_ = parent.childs.values()
+            parent.prefix += current.prefix
+            parent.childs = current.childs
+            parent.is_key = current.is_key
 
     def debug(self):
-        self.root.debug("")
+        self.root.debug()
 
 
 def test1():
@@ -168,11 +201,56 @@ def test5():
     tree = RadixTree()
     for word in words[:]:
         tree.insert(word)
-        tree.debug()
-    # tree.debug()
+        # tree.debug()
+    tree.debug()
     print(tree.search("ba"))
     print(tree.search("all"))
     print(tree.search("alligator"))
+
+
+def random_word():
+    len = random.randint(10, 20)
+    return "".join(random.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(len))
+
+
+def test_random():
+    seed = random.randint(0, 10000)
+    print(seed)
+    random.seed(seed)
+    n = 100000
+    words = [random_word() for _ in range(n)]
+    tree = RadixTree()
+    for word in words:
+        tree.insert(word)
+        assert tree.search(word)
+
+    # tree.debug()
+
+    for word in words:
+        assert tree.search(word)
+
+
+def test6():
+    tree = RadixTree()
+    tree.insert("footer")
+    tree.debug()
+    tree.insert("foo")
+    tree.insert("foobar")
+    tree.insert("first")
+    tree.insert("foot")
+    tree.debug()
+    print("+++")
+    tree.remove("first")
+    tree.debug()
+    tree.remove("foot")
+    tree.debug()
+    tree.remove("foo")
+    tree.debug()
+    tree.remove("foobar")
+    print("+++")
+    tree.debug()
+    tree.remove("footer")
+    tree.debug()
 
 
 if __name__ == "__main__":
@@ -185,3 +263,5 @@ if __name__ == "__main__":
     # test4()
     # print("------------")
     test5()
+    # test_random()
+    # test6()
