@@ -66,7 +66,7 @@ TaskNoSuspend<void> TimerContext::poll_timer() {
 
     while (!timers_.empty() &&
            timers_.top().expired_time <= std::chrono::steady_clock::now()) {
-      auto top = std::move(timers_.top());
+      auto top = timers_.top();
       timers_.pop();
       if (cancel_timers_.find(top.id) != cancel_timers_.end()) {
         cancel_timers_.erase(top.id);
