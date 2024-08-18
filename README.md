@@ -59,6 +59,7 @@ Memory: 16GB
 ./build/http
 wrk -t8 -c1000 http://127.0.0.1:12345/
 
+ulimit -n 4096
 ./build/http_mt
 wrk -t16 -c1000 http://127.0.0.1:12345/
 ```
