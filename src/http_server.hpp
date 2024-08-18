@@ -106,8 +106,9 @@ TaskNoSuspend<void> HttpWorker<LoopType>::accept() {
     auto ret = co_await listener_.async_accept(addr);
     if (ret.is_error()) {
       std::cerr << "accept error " << ret.what() << std::endl;
+    } else {
+      client(ret.value());
     }
-    client(ret.value());
   }
 }
 
