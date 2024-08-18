@@ -5,6 +5,8 @@
 #include <random>
 #include <unordered_map>
 
+static constexpr size_t NUM_KEYS = 1600000;
+
 static void BM_AdaptiveRadixTree(benchmark::State &state) {
   AdaptiveRadixTree<int> tree;
   std::hash<uint64_t> hasher;
@@ -22,7 +24,7 @@ static void BM_AdaptiveRadixTree(benchmark::State &state) {
   }
 }
 
-BENCHMARK(BM_AdaptiveRadixTree);
+BENCHMARK(BM_AdaptiveRadixTree)->Iterations(NUM_KEYS);
 
 static void BM_unordered_map(benchmark::State &state) {
   std::unordered_map<std::string, int> tree;
@@ -44,7 +46,7 @@ static void BM_unordered_map(benchmark::State &state) {
   }
 }
 
-BENCHMARK(BM_unordered_map);
+BENCHMARK(BM_unordered_map)->Iterations(NUM_KEYS);
 
 static void BM_map(benchmark::State &state) {
   std::map<std::string, int> tree;
@@ -66,5 +68,5 @@ static void BM_map(benchmark::State &state) {
   }
 }
 
-BENCHMARK(BM_map);
+BENCHMARK(BM_map)->Iterations(NUM_KEYS);
 BENCHMARK_MAIN();
