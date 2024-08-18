@@ -4,7 +4,6 @@
 #include "http_util.hpp"
 #include <functional>
 #include <string>
-#include <unordered_map>
 
 namespace co_io {
 
