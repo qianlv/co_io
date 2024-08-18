@@ -87,17 +87,21 @@ void test_file(std::string filename) {
   std::ifstream fin(filename);
   std::string word;
   std::vector<std::string> words;
-  AdaptiveRadixTree<int> tree;
+  AdaptiveRadixTree<size_t> tree;
+  size_t i = 0;
   while (fin >> word) {
     words.push_back(word);
-    tree.insert(word, 1);
+    tree.insert(word, i);
+    i += 1;
   }
-  int result;
-  for (auto w: words) {
-    if (tree.search(w, result)) {
-      std::cerr << w << " -> " << result << std::endl;
-    } else {
-      std::cerr << w << " -> " << "not found" << std::endl;
+  size_t result;
+  for (i = 0; i < words.size(); i++) {
+    if (!tree.search(words[i], result)) {
+      std::cerr << words[i] << " -> " << "not found" << std::endl;
+      return;
+    }
+    if (result != i) {
+      std::cerr << words[i] << " -> " << result << std::endl;
       return;
     }
   }
@@ -117,15 +121,15 @@ void test256() {
 }
 
 int main(int argc, char *argv[]) {
-  // test1();
-  // test2();
-  // test3();
-  // test4();
-  // test5();
-  // test_random(1000);
+  test1();
+  test2();
+  test3();
+  test4();
+  test5();
+  test_random(1000);
   if (argc > 1) {
     test_file(argv[1]);
   }
-  // test256();
+  test256();
   return 0;
 }

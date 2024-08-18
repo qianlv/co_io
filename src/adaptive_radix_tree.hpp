@@ -20,6 +20,10 @@ public:
   bool search(std::string_view key, Value &value);
   void debug();
   // void erase();
+  
+  ~AdaptiveRadixTree() {
+    delete root;
+  }
 
 private:
   Node *root = new Node4{};
@@ -51,12 +55,17 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node {
   Node() = default;
   Node(std::string_view prefix) : prefix(prefix) {}
   Node(const Node &) = default;
-  virtual ~Node() = default;
+  virtual ~Node() {
+    if (leaf) {
+      delete leaf;
+    }
+  }
 
   void copy(Node *node) {
     this->prefix = std::move(node->prefix);
     this->nchilds = node->nchilds;
     this->leaf = node->leaf;
+    node->leaf = nullptr;
   }
 
   void debug(size_t width) {
@@ -141,12 +150,21 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node4 : public Node {
     std::copy(key, key + N, node->key);
     std::copy(childs, childs + N, node->childs);
     node->copy(this);
+    clear_childs();
     return node;
   }
   Node *shrink() override { return nullptr; }
   bool is_full() override { return Node::nchilds == N; }
 
   Node *clone() override { return new Node4(*this); }
+
+  ~Node4() override {
+    for (uint8_t i = 0; i < N; i++) {
+      if (childs[i]) {
+        delete childs[i];
+      }
+    }
+  }
 };
 
 template <typename Value>
@@ -204,6 +222,7 @@ struct AdaptiveRadixTree<Value>::Node16 : public Node {
     for (uint8_t i = 0; i < N; i++) {
       node->key[key[i]] = i;
       node->childs[i] = childs[i];
+      childs[i] = nullptr;
     }
     node->copy(this);
     return node;
@@ -219,6 +238,14 @@ struct AdaptiveRadixTree<Value>::Node16 : public Node {
   }
   bool is_full() override { return Node::nchilds == N; }
   Node *clone() override { return new Node16(*this); }
+
+  ~Node16() override {
+    for (uint8_t i = 0; i < N; i++) {
+      if (childs[i]) {
+        delete childs[i];
+      }
+    }
+  }
 };
 
 template <typename Value>
@@ -276,6 +303,7 @@ struct AdaptiveRadixTree<Value>::Node48 : public Node {
     for (uint16_t i = 0; i < 256; i++) {
       if (key[i] != N) {
         node->childs[i] = childs[key[i]];
+        childs[key[i]] = nullptr;
       }
     }
     node->copy(this);
@@ -298,6 +326,14 @@ struct AdaptiveRadixTree<Value>::Node48 : public Node {
   }
   bool is_full() override { return Node::nchilds == N; }
   Node *clone() override { return new Node48(*this); }
+
+  ~Node48() override {
+    for (uint8_t i = 0; i < N; i++) {
+      if (childs[i]) {
+        delete childs[i];
+      }
+    }
+  }
 };
 
 template <typename Value>
@@ -353,6 +389,14 @@ struct AdaptiveRadixTree<Value>::Node256 : public Node {
   }
   bool is_full() override { return Node::nchilds == N; }
   Node *clone() override { return new Node256(*this); }
+
+  ~Node256() override {
+    for (uint16_t i = 0; i < N; i++) {
+      if (childs[i]) {
+        delete childs[i];
+      }
+    }
+  }
 };
 
 template <typename Value>
@@ -377,13 +421,12 @@ void AdaptiveRadixTree<Value>::insert(std::string_view key, Value value) {
       current->prefix = current->prefix.substr(0, match_prefix);
       current->clear_childs();
       current->add_node(new_node->prefix[0], new_node);
+      current->leaf = nullptr;
       if (key.length() > match_prefix) {
-        current->leaf = nullptr;
         current->add_node(key[match_prefix], new Node4{
                                                  key.substr(match_prefix),
                                              });
       }
-      // current->debug(0);
     }
 
     key.remove_prefix(match_prefix);
@@ -401,7 +444,11 @@ void AdaptiveRadixTree<Value>::insert(std::string_view key, Value value) {
       current = *parent;
     }
   }
-  current->leaf = new Leaf{value};
+  if (current->leaf) {
+    current->leaf->value = value;
+  } else {
+    current->leaf = new Leaf{value};
+  }
 }
 
 template <typename Value>
