@@ -63,7 +63,7 @@ int HttpPraser::on_message_complete(llhttp_t *parser) {
 
 int HttpPraser::on_url(llhttp_t *parser, const char *at, size_t length) {
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
-  p->req.url = std::string(at, length);
+  p->req.set_url(std::string_view(at, length));
   return 0;
 }
 

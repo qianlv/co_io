@@ -1,4 +1,5 @@
 #include "http_util.hpp"
+#include <cstdint>
 
 namespace co_io {
 
@@ -74,6 +75,56 @@ std::string_view http_status(int status) {
     return it->second;
   }
   return "Unknown Status"sv;
+}
+
+static inline int hex_to_val(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  } else if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  } else if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  }
+  return -1;
+}
+
+std::string UrlCodec::decode_url(std::string_view str, bool plus_as_space) {
+  if (str.size() < 3) {
+    return std::string(str);
+  }
+
+  std::string decoded;
+  size_t i = 0;
+  for (i = 0; i + 2 < str.size(); i++) {
+    if (str[i] == '%') {
+      decoded.push_back(static_cast<char>((hex_to_val(str[i + 1]) << 4) |
+                                          hex_to_val(str[i + 2])));
+      i += 2;
+    } else if (plus_as_space && str[i] == '+') {
+      decoded.push_back(' ');
+    } else {
+      decoded.push_back(str[i]);
+    }
+  }
+  decoded.append(str.substr(i));
+
+  return decoded;
+}
+
+std::vector<std::string_view> split(std::string_view s, std::string_view sep,
+                                    size_t max_split) {
+  std::vector<std::string_view> ret;
+  for (size_t i = 0;
+       i < s.size() && (max_split == 0 || ret.size() < max_split);) {
+    auto j = s.find(sep, i);
+    if (j == std::string_view::npos) {
+      ret.push_back(s.substr(i));
+      break;
+    }
+    ret.push_back(s.substr(i, j - i));
+    i = j + sep.size();
+  }
+  return ret;
 }
 
 } // namespace co_io
