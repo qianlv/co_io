@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <stack>
 #include <string_view>
 
 template <typename Value> class AdaptiveRadixTree {
@@ -20,10 +21,101 @@ public:
   bool search(std::string_view key, Value &value);
   void debug();
   // void erase();
-  
-  ~AdaptiveRadixTree() {
-    delete root;
-  }
+  class Iterator;
+  Iterator begin();
+  Iterator end();
+
+  ~AdaptiveRadixTree() { delete root; }
+
+  class Iterator {
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+    using value_type = std::pair<std::string, Value>;
+    using pointer = value_type *;
+    using reference = value_type &;
+
+    Iterator() = default;
+    explicit Iterator(Node *node) {
+      stack.push({node->prefix, node});
+      if (!next_leaf(0)) { // empty tree
+        stack = std::stack<std::pair<std::string, Node *>>();
+      } else {
+        value = {stack.top().first, stack.top().second->leaf->value};
+      }
+    }
+
+    reference operator*() {
+      assert(stack.size() > 0);
+      return value;
+    }
+
+    bool operator==(const Iterator &other) const {
+      if (stack.size() != other.stack.size()) {
+        return false;
+      }
+      if (stack.empty() || (stack.size() > 0 &&
+                            stack.top().second == other.stack.top().second)) {
+        return true;
+      }
+      return false;
+    }
+
+    bool operator!=(const Iterator &other) const { return !(*this == other); }
+
+    pointer operator->() {
+      assert(stack.size() > 0);
+      return &value;
+    }
+
+    Iterator &operator++() {
+      assert(stack.size() > 0);
+      uint16_t start_key = 0;
+      while (!stack.empty() && !next_leaf(start_key)) { // not new leaf, pop top
+        if (!stack.top().second->prefix.empty()) { // non root node, only root
+                                                   // node prefix is empty
+          uint16_t next_key =
+              static_cast<uint16_t>(stack.top().second->prefix.front()) + 1;
+          start_key = next_key;
+        }
+        stack.pop();
+      }
+      if (!stack.empty()) {
+        value = {stack.top().first, stack.top().second->leaf->value};
+      }
+      return *this;
+    }
+
+    Iterator operator++(int) {
+      Iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+  private:
+    bool next_leaf(uint16_t start_key) {
+      assert(stack.size() > 0);
+      // std::cerr << stack.top().second->prefix << " " << static_cast<char>(start_key) << std::endl;
+      bool new_leaf = false;
+      do {
+        auto &[prefix, current] = stack.top();
+        uint16_t next_key = 256;
+        if (current->nchilds > 0 &&
+            (next_key = current->lower_bound_key(start_key)) != 256) {
+          Node **next = current->get_node(next_key);
+          assert(next != nullptr);
+          stack.push({prefix + (*next)->prefix, *next});
+          start_key = 0;
+          new_leaf = true;
+        } else {
+          break;
+        }
+      } while (stack.top().second->leaf == nullptr);
+      return new_leaf;
+    }
+    std::pair<std::string, Value> value;
+    std::stack<std::pair<std::string, Node *>> stack;
+  };
 
 private:
   Node *root = new Node4{};
@@ -89,6 +181,7 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node {
   virtual Node *shrink() = 0;
   virtual bool is_full() = 0;
   virtual Node *clone() = 0;
+  virtual uint16_t lower_bound_key(uint16_t k) = 0;
 };
 
 template <typename Value> struct AdaptiveRadixTree<Value>::Node4 : public Node {
@@ -112,18 +205,31 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node4 : public Node {
     Node::nchilds = 0;
   }
 
+  uint16_t lower_bound_key(uint16_t k) override {
+    uint8_t index = 0;
+    while (index < Node::nchilds && key[index] < k) {
+      index++;
+    }
+    if (index < Node::nchilds) {
+      return key[index];
+    } else {
+      return 256;
+    }
+  }
+
   void add_node(uint8_t k, Node *node) override {
     assert(Node::nchilds < N);
-    for (uint8_t i = 0; i < N; i++) {
-      if (!childs[i]) {
-        key[i] = k;
-        childs[i] = node;
-        Node::nchilds++;
-        break;
-      }
+    uint8_t index = 0;
+    while (index < Node::nchilds && key[index] < k) {
+      index += 1;
     }
-    // std::cerr << "node size = " << static_cast<int>(Node::nchilds) <<
-    // std::endl;
+    for (uint8_t i = Node::nchilds; i > index; i--) {
+      key[i] = key[i - 1];
+      childs[i] = childs[i - 1];
+    }
+    key[index] = k;
+    childs[index] = node;
+    Node::nchilds++;
   }
 
   void del_node(uint8_t k) override {
@@ -187,17 +293,33 @@ struct AdaptiveRadixTree<Value>::Node16 : public Node {
     Node::nchilds = 0;
   }
 
-  void add_node(uint8_t k, Node *node) override {
-    assert(Node::nchilds < N);
-    for (uint8_t i = 0; i < N; i++) {
-      if (!childs[i]) {
-        key[i] = k;
-        childs[i] = node;
-        Node::nchilds++;
-        return;
-      }
+  uint16_t lower_bound_key(uint16_t k) override {
+    uint8_t index = 0;
+    while (index < Node::nchilds && key[index] < k) {
+      // std::cerr << "k = " << k << " key[" << index << "] = " << static_cast<char>(key[index]) << std::endl;
+      index++;
+    }
+    if (index < Node::nchilds) {
+      return key[index];
+    } else {
+      return 256;
     }
   }
+
+  void add_node(uint8_t k, Node *node) override {
+    uint8_t index = 0;
+    while (index < Node::nchilds && key[index] < k) {
+      index += 1;
+    }
+    for (uint8_t i = Node::nchilds; i > index; i--) {
+      key[i] = key[i - 1];
+      childs[i] = childs[i - 1];
+    }
+    key[index] = k;
+    childs[index] = node;
+    Node::nchilds++;
+  }
+
   void del_node(uint8_t k) override {
     for (uint8_t i = 0; i < N; i++) {
       if (childs[i] && key[i] == k) {
@@ -266,6 +388,14 @@ struct AdaptiveRadixTree<Value>::Node48 : public Node {
     std::fill(key, key + 256, N);
     std::fill(childs, childs + N, nullptr);
     Node::nchilds = 0;
+  }
+
+  uint16_t lower_bound_key(uint16_t k) override {
+    uint16_t nk = k;
+    while (nk < 256 && key[nk] == N) {
+      nk += 1;
+    }
+    return nk;
   }
 
   void add_node(uint8_t k, Node *node) override {
@@ -350,6 +480,14 @@ struct AdaptiveRadixTree<Value>::Node256 : public Node {
   void clear_childs() override {
     std::fill(childs, childs + N, nullptr);
     Node::nchilds = 0;
+  }
+
+  uint16_t lower_bound_key(uint16_t k) override {
+    uint16_t nk = k;
+    while (nk < 256 && childs[nk] == nullptr) {
+      nk += 1;
+    }
+    return nk;
   }
 
   void add_node(uint8_t k, Node *node) override {
@@ -488,4 +626,14 @@ bool AdaptiveRadixTree<Value>::search(std::string_view key, Value &value) {
 template <typename Value> void AdaptiveRadixTree<Value>::debug() {
   this->root->debug(0);
   std::cerr << "-----------------------------------\n";
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Iterator AdaptiveRadixTree<Value>::begin() {
+  return Iterator{root};
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Iterator AdaptiveRadixTree<Value>::end() {
+  return {};
 }
