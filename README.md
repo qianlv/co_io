@@ -24,15 +24,14 @@ cmake --build build
 
 1. HTTPS
 2. Notification queue with Coroutine, Notification queue is suspend at the condition variable, it's conflict with Coroutine.
-3. Using Adaptive Radix Tree to support path routing
-4. Adaptive Radix Tree remove operation
+3. Adaptive Radix Tree remove operation
+4. Router regex match with arguments
 
 ## Dependencies
 
-1. C++ >= 20
-2. [llhttp](https://github.com/nodejs/llhttp)
-3. [Adaptive Radix Tree](http://www-db.in.tum.de/~leis/papers/ART.pdf)
-4. [Radix Tree](https://en.wikipedia.org/wiki/Radix_tree)
+- C++ >= 20
+- [llhttp](https://github.com/nodejs/llhttp)
+- [benchmark](https://github.com/google/benchmark)
 
 ## Example
 
@@ -85,5 +84,9 @@ Running 10s test @ http://127.0.0.1:12345/
   5551168 requests in 10.09s, 0.98GB read
 Requests/sec: 550266.20
 Transfer/sec:     99.71MB
-
 ```
+
+### Reference
+
+- [Adaptive Radix Tree](http://www-db.in.tum.de/~leis/papers/ART.pdf)
+- [Radix Tree](https://en.wikipedia.org/wiki/Radix_tree)
