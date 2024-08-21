@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -8,6 +9,25 @@
 #include "byte_buffer.hpp"
 
 namespace co_io {
+
+enum HttpMethod {
+  GET = 1 << 0,
+  POST = 1 << 1,
+  PUT = 1 << 2,
+  DELETE = 1 << 3,
+  HEAD = 1 << 4,
+  PATCH = 1 << 5,
+  OPTIONS = 1 << 6,
+  TRACE = 1 << 7,
+  CONNECT = 1 << 8
+};
+
+enum HttpVersion { HTTP_1_0, HTTP_1_1 };
+
+std::string_view http_method(HttpMethod method);
+enum HttpMethod http_method(std::string_view method);
+std::string_view http_version(HttpVersion version);
+enum HttpVersion http_version(std::string_view version);
 
 std::string_view http_status(int status);
 std::vector<std::string_view> split(std::string_view s, std::string_view sep,
@@ -27,9 +47,9 @@ struct HttpRequest {
   std::unordered_map<std::string, std::string> headers;
   std::unordered_map<std::string, std::string> args;
   std::string url;
-  std::string method;
+  enum HttpMethod method;
   std::string body;
-  std::string version;
+  enum HttpVersion version;
 
   bool keep_alive() const {
     auto it = headers.find("Connection");
@@ -37,7 +57,7 @@ struct HttpRequest {
       return it->second == "keep-alive";
     }
 
-    if (version == "HTTP/1.0") {
+    if (version == HTTP_1_0) {
       return false;
     }
     return true;
@@ -63,12 +83,18 @@ struct HttpRequest {
     }
   }
 
+  void set_http_method(std::string_view m) {
+    method = http_method(m);
+  }
+
+  void set_http_version(std::string_view v) {
+    version = http_version(v);
+  }
+
   void clear() {
     headers.clear();
     url.clear();
-    method.clear();
     body.clear();
-    version.clear();
   }
 };
 
@@ -96,5 +122,7 @@ public:
   std::string body;
   int status = 200;
 };
+
+using HttpReponseCallback = std::function<HttpResponse(HttpRequest)>;
 
 } // namespace co_io

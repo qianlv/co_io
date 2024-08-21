@@ -1,5 +1,5 @@
 #include "http_util.hpp"
-#include <cstdint>
+#include <algorithm>
 
 namespace co_io {
 
@@ -125,6 +125,81 @@ std::vector<std::string_view> split(std::string_view s, std::string_view sep,
     i = j + sep.size();
   }
   return ret;
+}
+
+std::string_view http_method(HttpMethod method) {
+  using namespace std::string_view_literals;
+  switch (method) {
+  case HttpMethod::GET:
+    return "GET"sv;
+  case HttpMethod::POST:
+    return "POST"sv;
+  case HttpMethod::PUT:
+    return "PUT"sv;
+  case HttpMethod::DELETE:
+    return "DELETE"sv;
+  case HttpMethod::HEAD:
+    return "HEAD"sv;
+  case HttpMethod::PATCH:
+    return "PATCH"sv;
+  case HttpMethod::OPTIONS:
+    return "OPTIONS"sv;
+  case HttpMethod::TRACE:
+    return "TRACE"sv;
+  case HttpMethod::CONNECT:
+    return "CONNECT"sv;
+  default:
+    return "Unknown Method"sv;
+  }
+}
+
+enum HttpMethod http_method(std::string_view m) {
+  std::string method(m);
+  std::transform(method.begin(), method.end(), method.begin(),
+                 [](unsigned char c) { return std::toupper(c); });
+  if (method == "GET") {
+    return HttpMethod::GET;
+  } else if (method == "POST") {
+    return HttpMethod::POST;
+  } else if (method == "PUT") {
+    return HttpMethod::PUT;
+  } else if (method == "DELETE") {
+    return HttpMethod::DELETE;
+  } else if (method == "HEAD") {
+    return HttpMethod::HEAD;
+  } else if (method == "PATCH") {
+    return HttpMethod::PATCH;
+  } else if (method == "OPTIONS") {
+    return HttpMethod::OPTIONS;
+  } else if (method == "TRACE") {
+    return HttpMethod::TRACE;
+  } else if (method == "CONNECT") {
+    return HttpMethod::CONNECT;
+  }
+  throw std::runtime_error("Unknown Method");
+}
+
+enum HttpVersion http_version(std::string_view v) {
+  std::string version(v);
+  std::transform(version.begin(), version.end(), version.begin(),
+                 [](unsigned char c) { return std::toupper(c); });
+  if (version == "1.0") {
+    return HttpVersion::HTTP_1_0;
+  } else if (version == "1.1") {
+    return HttpVersion::HTTP_1_1;
+  }
+  throw std::runtime_error("Unknown Version");
+}
+
+std::string_view http_version(HttpVersion version) {
+  using namespace std::string_view_literals;
+  switch (version) {
+  case HttpVersion::HTTP_1_0:
+    return "HTTP/1.0"sv;
+  case HttpVersion::HTTP_1_1:
+    return "HTTP/1.1"sv;
+  }
+  throw std::runtime_error("Unknown Version");
 }
 
 } // namespace co_io

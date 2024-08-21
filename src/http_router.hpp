@@ -1,6 +1,7 @@
 #pragma once
 
 #include "adaptive_radix_tree.hpp"
+#include "http_endpoint.hpp"
 #include "http_util.hpp"
 #include <functional>
 #include <string>
@@ -9,22 +10,25 @@ namespace co_io {
 
 class HttpRouter {
 public:
-  using HttpReponseCallback = std::function<HttpResponse(HttpRequest)>;
-
-  void route(const std::string &url, HttpReponseCallback callback) {
-    routes_.insert(url, std::move(callback));
+  void route(const std::string &url, enum HttpMethod method,
+             HttpReponseCallback callback) {
+    std::string key = url + "_" + std::string(http_method(method));
+    routes_.insert(key, HttpEndpoint{std::move(callback), url, method});
   }
 
   HttpResponse handle(HttpRequest req) {
-    HttpReponseCallback callback;
-    if (routes_.search(req.url, callback)) {
-      return callback(req);
+    HttpEndpoint end_point;
+    std::string key = req.url + "_" + std::string(http_method(req.method));
+    if (routes_.search(key, end_point)) {
+      if (end_point.match(req)) {
+        return end_point(std::move(req));
+      }
     }
     return HttpResponse{404}; // 404
   }
 
 private:
-  AdaptiveRadixTree<HttpReponseCallback> routes_;
+  AdaptiveRadixTree<HttpEndpoint> routes_;
 };
 
 } // namespace co_io

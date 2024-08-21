@@ -69,13 +69,13 @@ int HttpPraser::on_url(llhttp_t *parser, const char *at, size_t length) {
 
 int HttpPraser::on_method(llhttp_t *parser, const char *at, size_t length) {
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
-  p->req.method = std::string(at, length);
+  p->req.set_http_method(std::string_view(at, length));
   return 0;
 }
 
 int HttpPraser::on_version(llhttp_t *parser, const char *at, size_t length) {
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
-  p->req.version = std::string(at, length);
+  p->req.set_http_version(std::string_view(at, length));
   return 0;
 }
 
