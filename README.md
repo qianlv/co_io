@@ -69,21 +69,21 @@ wrk -t16 -c1000 http://127.0.0.1:12345/
 Running 10s test @ http://127.0.0.1:12345/
   8 threads and 1000 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    30.51ms   26.57ms 991.59ms   99.25%
-    Req/Sec     3.87k   639.68     5.45k    72.12%
-  307879 requests in 10.09s, 55.79MB read
-  Socket errors: connect 0, read 0, write 0, timeout 322
-Requests/sec:  30524.07
-Transfer/sec:      5.53MB
+    Latency    52.78ms   86.88ms   2.00s    98.95%
+    Req/Sec     2.19k   641.97     4.19k    73.25%
+  174730 requests in 10.05s, 31.66MB read
+  Socket errors: connect 0, read 0, write 0, timeout 335
+Requests/sec:  17384.99
+Transfer/sec:      3.15MB
 
 Running 10s test @ http://127.0.0.1:12345/
   16 threads and 1000 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     3.08ms    4.08ms  50.67ms   86.10%
-    Req/Sec    34.61k     5.08k   68.98k    77.45%
-  5551168 requests in 10.09s, 0.98GB read
-Requests/sec: 550266.20
-Transfer/sec:     99.71MB
+    Latency     6.32ms    6.43ms 262.54ms   93.12%
+    Req/Sec    10.96k     1.84k   34.32k    81.69%
+  1753781 requests in 10.10s, 486.71MB read
+Requests/sec: 173642.75
+Transfer/sec:     48.19MB
 ```
 
 ### Reference
