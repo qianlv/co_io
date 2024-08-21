@@ -143,9 +143,17 @@ public:
         }
         caller_.resume();
       }
+
       void unhandled_exception() {
         std::cerr << "unhandled exception" << std::endl;
         exception_ = std::current_exception();
+      }
+
+      ret_type result() {
+        if (exception_) {
+          std::rethrow_exception(exception_);
+        }
+        return return_value_;
       }
     };
 
@@ -162,7 +170,7 @@ public:
       task.handle_.promise().caller_ = h;
     }
 
-    T await_resume() const { return task.get_handle().promise().return_value_; }
+    T await_resume() const { return task.get_handle().promise().result(); }
   };
 
   explicit AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec = 0);
