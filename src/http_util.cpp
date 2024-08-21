@@ -179,10 +179,7 @@ enum HttpMethod http_method(std::string_view m) {
   throw std::runtime_error("Unknown Method");
 }
 
-enum HttpVersion http_version(std::string_view v) {
-  std::string version(v);
-  std::transform(version.begin(), version.end(), version.begin(),
-                 [](unsigned char c) { return std::toupper(c); });
+enum HttpVersion http_version(std::string_view version) {
   if (version == "1.0") {
     return HttpVersion::HTTP_1_0;
   } else if (version == "1.1") {
