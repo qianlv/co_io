@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <stack>
 #include <string_view>
 
@@ -18,7 +19,7 @@ template <typename Value> class AdaptiveRadixTree {
 
 public:
   void insert(std::string_view key, Value value);
-  bool search(std::string_view key, Value &value);
+  std::optional<Value> search(std::string_view key);
   void debug();
   // void erase();
   class Iterator;
@@ -590,7 +591,7 @@ void AdaptiveRadixTree<Value>::insert(std::string_view key, Value value) {
 }
 
 template <typename Value>
-bool AdaptiveRadixTree<Value>::search(std::string_view key, Value &value) {
+std::optional<Value> AdaptiveRadixTree<Value>::search(std::string_view key) {
   Node *current = root;
   while (!key.empty()) {
     size_t match_prefix = current->match(key);
@@ -604,7 +605,7 @@ bool AdaptiveRadixTree<Value>::search(std::string_view key, Value &value) {
     //                               key.length() - match_prefix)
     //           << std::endl;
     if (current->prefix.length() > match_prefix) { // prefix not complete match
-      return false;
+      return {};
     }
     key.remove_prefix(match_prefix);
     if (key.empty()) { // prefix complete match and remaining key is empty
@@ -612,15 +613,14 @@ bool AdaptiveRadixTree<Value>::search(std::string_view key, Value &value) {
     }
     Node **p = current->get_node(key[0]);
     if (p == nullptr) { // remaing key not next node to match
-      return false;
+      return {};
     }
     current = *p;
   }
   if (current->leaf != nullptr) {
-    value = current->leaf->value;
-    return true;
+    return {current->leaf->value};
   }
-  return false;
+  return {};
 }
 
 template <typename Value> void AdaptiveRadixTree<Value>::debug() {

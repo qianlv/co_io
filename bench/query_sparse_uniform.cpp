@@ -17,10 +17,10 @@ static void BM_AdaptiveRadixTree(benchmark::State &state) {
     count += 1;
   }
 
-  int result;
+  std::optional<int> result;
   std::mt19937 rng2(0);
   for (auto _ : state) {
-    tree.search(std::to_string(hasher(rng2())), result);
+    result = tree.search(std::to_string(hasher(rng2())));
   }
 }
 

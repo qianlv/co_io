@@ -30,6 +30,9 @@ include_directories(${llhttp_SOURCE_DIR}/include)
 # Link with the llhttp_static target
 target_link_libraries(co_io llhttp_static)
 
+find_package(re2 CONFIG REQUIRED)
+target_link_libraries(co_io re2::re2)
+
 macro(add_exec source name)
       add_executable(${name} ${source}/${name}.cpp)
       target_link_libraries(${name} co_io)

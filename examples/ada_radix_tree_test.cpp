@@ -94,14 +94,14 @@ void test_file(std::string filename) {
     tree.insert(word, i);
     i += 1;
   }
-  size_t result;
   for (i = 0; i < words.size(); i++) {
-    if (!tree.search(words[i], result)) {
+    std::optional<size_t> result = tree.search(words[i]);
+    if (!result) {
       std::cerr << words[i] << " -> " << "not found" << std::endl;
       return;
     }
-    if (result != i) {
-      std::cerr << words[i] << " -> " << result << std::endl;
+    if (*result != i) {
+      std::cerr << words[i] << " -> " << *result << std::endl;
       return;
     }
   }
