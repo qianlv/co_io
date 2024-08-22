@@ -18,20 +18,21 @@ cmake --build build
 3. io time out and timer, by timerfd with heap
 4. HTTP 1.1
 5. Multithread mode, using SO_REUSEADDR to dispatch fd when accept, [SO_REUSEADDR ref](https://lwn.net/Articles/542629/)
-6. Adaptive Radix Tree
+6. Adaptive Radix Tree to implement url router
+7. Router regex match
 
 ## TODO
 
 1. HTTPS
 2. Notification queue with Coroutine, Notification queue is suspend at the condition variable, it's conflict with Coroutine.
 3. Adaptive Radix Tree remove operation
-4. Router regex match with arguments
 
 ## Dependencies
 
 - C++ >= 20
 - [llhttp](https://github.com/nodejs/llhttp)
 - [benchmark](https://github.com/google/benchmark)
+- [re2](https://github.com/google/re2)
 
 ## Example
 
