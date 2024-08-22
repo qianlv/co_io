@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <stack>
 #include <string_view>
@@ -32,7 +33,7 @@ public:
   public:
     using iterator_category = std::forward_iterator_tag;
     using difference_type = std::ptrdiff_t;
-    using value_type = std::pair<std::string, Value>;
+    using value_type = std::pair<const std::string &, Value&>;
     using pointer = value_type *;
     using reference = value_type &;
 
@@ -42,13 +43,20 @@ public:
       if (!next_leaf(0)) { // empty tree
         stack = std::stack<std::pair<std::string, Node *>>();
       } else {
-        value = {stack.top().first, stack.top().second->leaf->value};
+        value.reset(new value_type(stack.top().first, stack.top().second->leaf->value));
       }
     }
 
     reference operator*() {
       assert(stack.size() > 0);
-      return value;
+      assert(value != nullptr);
+      return *value;
+    }
+
+    pointer operator->() {
+      assert(stack.size() > 0);
+      assert(value != nullptr);
+      return value.get();
     }
 
     bool operator==(const Iterator &other) const {
@@ -64,11 +72,6 @@ public:
 
     bool operator!=(const Iterator &other) const { return !(*this == other); }
 
-    pointer operator->() {
-      assert(stack.size() > 0);
-      return &value;
-    }
-
     Iterator &operator++() {
       assert(stack.size() > 0);
       uint16_t start_key = 0;
@@ -82,21 +85,22 @@ public:
         stack.pop();
       }
       if (!stack.empty()) {
-        value = {stack.top().first, stack.top().second->leaf->value};
+        value.reset(new value_type(stack.top().first, stack.top().second->leaf->value));
       }
       return *this;
     }
 
-    Iterator operator++(int) {
-      Iterator tmp = *this;
-      ++(*this);
-      return tmp;
-    }
+    // Iterator operator++(int) {
+    //   Iterator tmp = *this;
+    //   ++(*this);
+    //   return tmp;
+    // }
 
   private:
     bool next_leaf(uint16_t start_key) {
       assert(stack.size() > 0);
-      // std::cerr << stack.top().second->prefix << " " << static_cast<char>(start_key) << std::endl;
+      // std::cerr << stack.top().second->prefix << " " <<
+      // static_cast<char>(start_key) << std::endl;
       bool new_leaf = false;
       do {
         auto &[prefix, current] = stack.top();
@@ -114,7 +118,7 @@ public:
       } while (stack.top().second->leaf == nullptr);
       return new_leaf;
     }
-    std::pair<std::string, Value> value;
+    std::unique_ptr<value_type> value;
     std::stack<std::pair<std::string, Node *>> stack;
   };
 
@@ -297,7 +301,8 @@ struct AdaptiveRadixTree<Value>::Node16 : public Node {
   uint16_t lower_bound_key(uint16_t k) override {
     uint8_t index = 0;
     while (index < Node::nchilds && key[index] < k) {
-      // std::cerr << "k = " << k << " key[" << index << "] = " << static_cast<char>(key[index]) << std::endl;
+      // std::cerr << "k = " << k << " key[" << index << "] = " <<
+      // static_cast<char>(key[index]) << std::endl;
       index++;
     }
     if (index < Node::nchilds) {
