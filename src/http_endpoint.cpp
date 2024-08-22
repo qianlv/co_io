@@ -7,9 +7,8 @@ bool HttpEndpoint::match(const HttpRequest &req) {
     return false;
   }
 
-  // TODO
-  if (use_regex_) {
-    return true;
+  if (regex_) {
+    return re2::RE2::FullMatch(req.url, *regex_, nullptr);
   }
 
   return true;

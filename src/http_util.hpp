@@ -99,9 +99,6 @@ struct HttpRequest {
 };
 
 struct HttpResponse {
-public:
-  HttpResponse(int status = 200) : status(status) {}
-
   void serialize(ByteBuffer &buf) const {
     buf.append("HTTP/1.1 ");
     buf.append(std::to_string(status));
@@ -117,10 +114,9 @@ public:
     buf.append(body);
   }
 
-public:
+  int status = 200;
   std::unordered_map<std::string, std::string> headers;
   std::string body;
-  int status = 200;
 };
 
 using HttpReponseCallback = std::function<HttpResponse(HttpRequest)>;

@@ -3,22 +3,26 @@
 #include "adaptive_radix_tree.hpp"
 #include "http_endpoint.hpp"
 #include "http_util.hpp"
-#include <functional>
 #include <string>
 
 namespace co_io {
 
 class HttpRouter {
 public:
-  void route(const std::string &url, HttpMethod method,
+  bool route(const std::string &url, HttpMethod method,
              HttpReponseCallback callback, bool use_regex = false) {
     std::string key = url + "_" + std::string(http_method(method));
-    if (!use_regex) {
-      match_routes_.insert(key, HttpEndpoint{std::move(callback), url, method});
-    } else {
-      regex_routes_.insert(
-          key, HttpEndpoint{std::move(callback), url, method, true});
+    HttpEndpoint end_point{std::move(callback), url, method, use_regex};
+    if (!end_point.ok()) {
+      return false;
     }
+
+    if (!use_regex) {
+      match_routes_.insert(key, std::move(end_point));
+    } else {
+      regex_routes_.insert(key, std::move(end_point));
+    }
+    return true;
   }
 
   HttpResponse handle(HttpRequest req) {
@@ -33,7 +37,7 @@ public:
         return end_point(std::move(req));
       }
     }
-    return HttpResponse{404}; // 404
+    return HttpResponse{.status = 404, .body = "<h1>404 Not Found</h1>"}; // 404
   }
 
 private:
