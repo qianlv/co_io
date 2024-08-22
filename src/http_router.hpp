@@ -10,7 +10,7 @@ namespace co_io {
 
 class HttpRouter {
 public:
-  void route(const std::string &url, enum HttpMethod method,
+  void route(const std::string &url, HttpMethod method,
              HttpReponseCallback callback) {
     std::string key = url + "_" + std::string(http_method(method));
     routes_.insert(key, HttpEndpoint{std::move(callback), url, method});

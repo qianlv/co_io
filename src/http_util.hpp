@@ -10,7 +10,7 @@
 
 namespace co_io {
 
-enum HttpMethod {
+enum class HttpMethod {
   GET = 1 << 0,
   POST = 1 << 1,
   PUT = 1 << 2,
@@ -22,7 +22,7 @@ enum HttpMethod {
   CONNECT = 1 << 8
 };
 
-enum HttpVersion { HTTP_1_0, HTTP_1_1 };
+enum class HttpVersion { HTTP_1_0, HTTP_1_1 };
 
 std::string_view http_method(HttpMethod method);
 enum HttpMethod http_method(std::string_view method);
@@ -57,7 +57,7 @@ struct HttpRequest {
       return it->second == "keep-alive";
     }
 
-    if (version == HTTP_1_0) {
+    if (version == HttpVersion::HTTP_1_0) {
       return false;
     }
     return true;

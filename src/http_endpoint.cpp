@@ -12,7 +12,7 @@ bool HttpEndpoint::match(const HttpRequest &req) {
     return true;
   }
 
-  return req.url == url_;
+  return true;
 }
 
 } // namespace co_io
