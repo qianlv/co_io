@@ -20,7 +20,7 @@ class TimerContext {
 
 public:
   TimerContext(LoopBase *loop)
-      : clock_fd_(detail::Execpted<int>(::timerfd_create(CLOCK_MONOTONIC, 0))
+      : clock_fd_(Execpted<int>(::timerfd_create(CLOCK_MONOTONIC, 0))
                       .execption("timerfd_create"),
                   loop) {
     poll_timer();
@@ -35,8 +35,8 @@ public:
 
   SleepAwaiter sleep_until(std::chrono::steady_clock::time_point expireTime);
   SleepAwaiter sleep_for(std::chrono::steady_clock::duration duration);
-  TaskNoSuspend<void> delay_run(std::chrono::steady_clock::duration duration,
-                                std::function<void()> func);
+  Task<void> delay_run(std::chrono::steady_clock::duration duration,
+                       std::function<void()> func);
 
 private:
   struct TimerEntry {
@@ -62,7 +62,7 @@ private:
 
   void reset();
 
-  TaskNoSuspend<void> poll_timer();
+  Task<void> poll_timer();
 
   std::priority_queue<TimerEntry> timers_;
   std::unordered_set<uint64_t> cancel_timers_;

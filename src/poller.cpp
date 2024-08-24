@@ -80,7 +80,7 @@ void SelectPoller::poll() {
 
   fd_set read_set{read_set_}, write_set{write_set_};
 
-  int n = detail::system_call(pselect(max_fd_ + 1, &read_set, &write_set,
+  int n = system_call(pselect(max_fd_ + 1, &read_set, &write_set,
                                       nullptr, nullptr, nullptr))
               .execption("pselect");
 
@@ -114,7 +114,7 @@ void SelectPoller::poll() {
 
 EPollPoller::EPollPoller()
     : PollerBase(),
-      epoll_fd_(detail::Execpted(epoll_create1(0)).execption("epoll_create1")) {
+      epoll_fd_(Execpted(epoll_create1(0)).execption("epoll_create1")) {
 }
 EPollPoller::~EPollPoller() { ::close(epoll_fd_); }
 
@@ -124,7 +124,7 @@ void EPollPoller::register_fd(int fd) {
   struct epoll_event ev;
   ev.events = 0;
   ev.data.ptr = nullptr;
-  detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev))
+  Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev))
       .execption("epoll_ctl register_fd");
 }
 
@@ -141,7 +141,7 @@ void EPollPoller::add_event(int fd, PollEvent event, callback handle) {
   }
   ev.data.fd = fd;
 
-  detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
+  Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
       .execption("epoll_ctl add_event");
 }
 
@@ -157,7 +157,7 @@ bool EPollPoller::remove_event(int fd, PollEvent event) {
       ev.events |= EPOLLOUT;
     }
     ev.data.fd = fd;
-    detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
+    Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev))
         .execption("epoll_ctl remove_event");
     return true;
   }
@@ -166,12 +166,12 @@ bool EPollPoller::remove_event(int fd, PollEvent event) {
 
 void EPollPoller::unregister_fd(int fd) {
   PollerBase::unregister_fd(fd);
-  detail::Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr))
+  Execpted(epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr))
       .execption("epoll_ctl unregister_fd");
 }
 
 void EPollPoller::poll() {
-  int n = detail::system_call(epoll_pwait(epoll_fd_, events_.data(),
+  int n = system_call(epoll_pwait(epoll_fd_, events_.data(),
                                           static_cast<int>(events_.size()), -1,
                                           nullptr))
               .execption("epoll_pwait");

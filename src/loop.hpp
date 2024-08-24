@@ -38,11 +38,15 @@ private:
   size_t count_{0};
 };
 
+// template <typename POLLER>
+// Loop<POLLER>::Loop(size_t count)
+//     : poller_(std::make_unique<POLLER>()),
+//       timer_(std::make_unique<TimerContext>(this)), count_{count} {}
+
 template <typename POLLER>
 Loop<POLLER>::Loop(size_t count)
     : poller_(std::make_unique<POLLER>()),
-      timer_(std::make_unique<TimerContext>(this)), count_{count} {}
-
+      timer_(nullptr), count_{count} {}
 using EPollLoop = Loop<EPollPoller>;
 using SelectLoop = Loop<SelectPoller>;
 

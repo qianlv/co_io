@@ -30,26 +30,25 @@ HttpPraser::HttpPraser(CallbackRequest on_request_complete)
 
 HttpPraser::~HttpPraser() { llhttp_finish(&parser_); }
 
-detail::Execpted<size_t> HttpPraser::parse(std::string_view data) {
+Execpted<size_t> HttpPraser::parse(std::string_view data) {
   llhttp_errno_t error = llhttp_execute(&parser_, data.data(), data.size());
   switch (error) {
   case HPE_OK:
-    return detail::Execpted{data.size()};
+    return Execpted{data.size()};
   // case HPE_PAUSED:
   // case HPE_PAUSED_UPGRADE:
   // case HPE_PAUSED_H2_UPGRADE:
   //   return detail::Execpted(
   //       static_cast<size_t>(parser_.error_pos - data.data()));
   default:
-    return detail::Execpted<size_t>(
-        std::error_code{error, http_parser_category()});
+    return Execpted<size_t>(std::error_code{error, http_parser_category()});
   }
 }
 
 int HttpPraser::on_message_complete(llhttp_t *parser) {
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
   if (parser->content_length == 0) {
-    p->on_request_complete_(std::move(p->req));
+    run_task(p->on_request_complete_(std::move(p->req)));
   } else {
     p->content_length = parser->content_length;
   }
@@ -107,7 +106,7 @@ int HttpPraser::on_body(llhttp_t *parser, const char *at, size_t length) {
   HttpPraser *p = static_cast<HttpPraser *>(parser->data);
   p->req.body.append(at, length);
   if (p->req.body.size() == p->content_length) {
-    p->on_request_complete_(std::move(p->req));
+    run_task(p->on_request_complete_(std::move(p->req)));
   }
   return 0;
 }

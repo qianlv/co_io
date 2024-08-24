@@ -2,7 +2,7 @@
 
 namespace co_io {
 
-TaskNoSuspend<void> HttpConnection::handle() {
+Task<void> HttpConnection::handle() {
   ByteBuffer buf{1024};
   while (!stop) {
     auto ret = co_await conn_.async_read(buf);
@@ -17,7 +17,7 @@ TaskNoSuspend<void> HttpConnection::handle() {
   }
 }
 
-TaskNoSuspend<void> HttpConnection::handle_request(HttpRequest req) {
+Task<void> HttpConnection::handle_request(HttpRequest req) {
   auto response = router_.handle(std::move(req));
   ByteBuffer buf;
   response.serialize(buf);

@@ -54,12 +54,11 @@ void TimerContext::reset() {
   new_value.it_interval.tv_sec = 0;
   new_value.it_interval.tv_nsec = 0;
 
-  detail::Execpted<int>(
-      ::timerfd_settime(clock_fd_.fd(), 0, &new_value, nullptr))
+  Execpted<int>(::timerfd_settime(clock_fd_.fd(), 0, &new_value, nullptr))
       .execption("timerfd_settime");
 }
 
-TaskNoSuspend<void> TimerContext::poll_timer() {
+Task<void> TimerContext::poll_timer() {
   while (true) {
     uint64_t exp = 0;
     co_await clock_fd_.async_read(reinterpret_cast<void *>(&exp), sizeof(exp));
@@ -88,7 +87,7 @@ TimerContext::sleep_for(std::chrono::steady_clock::duration duration) {
   return SleepAwaiter(std::chrono::steady_clock::now() + duration, this);
 }
 
-TaskNoSuspend<void>
+Task<void>
 TimerContext::delay_run(std::chrono::steady_clock::duration duration,
                         std::function<void()> func) {
   co_await sleep_for(duration);

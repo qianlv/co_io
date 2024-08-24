@@ -6,7 +6,6 @@
 #include <variant>
 
 namespace co_io {
-namespace detail {
 
 template <typename T> class Execpted {
 public:
@@ -69,7 +68,5 @@ private:
 template <typename T> Execpted<T> system_call(T syscall) {
   return Execpted<T>(syscall);
 }
-
-} // namespace detail
 
 } // namespace co_io

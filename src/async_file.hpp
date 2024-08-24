@@ -1,10 +1,7 @@
 #pragma once
 
-#include <coroutine>
 #include <cstring>
 #include <fcntl.h>
-#include <functional>
-#include <iostream>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -13,6 +10,7 @@
 #include "byte_buffer.hpp"
 #include "poller.hpp"
 #include "system_call.hpp"
+#include "task.hpp"
 
 namespace co_io {
 
@@ -54,7 +52,7 @@ struct AddressSolver {
     struct addrinfo *ptr = nullptr;
 
     int create_socket() const {
-      return detail::system_call(
+      return system_call(
                  ::socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol))
           .execption("socket");
     }
@@ -102,87 +100,14 @@ class LoopBase;
 
 class AsyncFile : public FileDescriptor {
 public:
-  template <typename ret_type> struct TaskAsnyc {
-    struct promise_type;
-    using handle_type = std::coroutine_handle<promise_type>;
-
-    struct OnceAwaiter {
-      std::function<ret_type()> func_;
-      handle_type task_handle_;
-
-      bool await_ready() const noexcept { return false; }
-      void await_suspend(std::coroutine_handle<>) const noexcept {}
-      ret_type await_resume() const {
-        if (task_handle_.promise().is_timeout) {
-          return ret_type{std::error_code(ECANCELED, std::system_category())};
-        }
-        return func_();
-      }
-    };
-
-    struct promise_type {
-      std::exception_ptr exception_;
-      ret_type return_value_;
-      std::coroutine_handle<> caller_;
-      bool is_timeout = false;
-
-      TaskAsnyc get_return_object() {
-        return {handle_type::from_promise(*this)};
-      }
-      std::suspend_never initial_suspend() { return {}; }
-      std::suspend_never final_suspend() noexcept { return {}; }
-
-      OnceAwaiter await_transform(std::function<ret_type()> func) {
-        return OnceAwaiter{func, handle_type::from_promise(*this)};
-      }
-
-      void return_value(ret_type value) noexcept {
-        return_value_ = std::move(value);
-        if (exception_) {
-          std::rethrow_exception(exception_);
-        }
-        caller_.resume();
-      }
-
-      void unhandled_exception() {
-        std::cerr << "unhandled exception" << std::endl;
-        exception_ = std::current_exception();
-      }
-
-      ret_type result() {
-        if (exception_) {
-          std::rethrow_exception(exception_);
-        }
-        return return_value_;
-      }
-    };
-
-    auto get_handle() const { return handle_; }
-
-    handle_type handle_;
-  };
-
-  template <typename T> struct FinalAwaiter {
-    TaskAsnyc<T> task;
-
-    bool await_ready() const noexcept { return false; }
-    void await_suspend(std::coroutine_handle<> h) const noexcept {
-      task.handle_.promise().caller_ = h;
-    }
-
-    T await_resume() const { return task.get_handle().promise().result(); }
-  };
-
   explicit AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec = 0);
 
-  FinalAwaiter<detail::Execpted<ssize_t>> async_read(void *buf, size_t size);
-  FinalAwaiter<detail::Execpted<ssize_t>> async_read(ByteBuffer &buf);
-  FinalAwaiter<detail::Execpted<ssize_t>> async_write(const void *buf,
-                                                      size_t size);
-  FinalAwaiter<detail::Execpted<ssize_t>> async_write(std::string_view buf);
-  FinalAwaiter<detail::Execpted<int>> async_accept(AddressSolver::Address &);
-  FinalAwaiter<detail::Execpted<int>>
-  async_connect(AddressSolver::Address const &addr);
+  Task<Execpted<ssize_t>> async_read(void *buf, size_t size);
+  Task<Execpted<ssize_t>> async_read(ByteBuffer &buf);
+  Task<Execpted<ssize_t>> async_write(const void *buf, size_t size);
+  Task<Execpted<ssize_t>> async_write(std::string_view buf);
+  Task<Execpted<int>> async_accept(AddressSolver::Address &);
+  Task<Execpted<int>> async_connect(AddressSolver::Address const &addr);
   static AsyncFile bind(AddressSolver::AddressInfo const &addr, LoopBase *loop);
   static int create_listen(AddressSolver::AddressInfo const &addr);
 
@@ -196,10 +121,6 @@ public:
   ~AsyncFile();
 
 private:
-  template <typename Ret>
-  TaskAsnyc<detail::Execpted<Ret>>
-  async_r(std::function<detail::Execpted<Ret>()> func, PollEvent event);
-
   LoopBase *loop_ = nullptr;
   unsigned time_out_sec_ = 0;
 };

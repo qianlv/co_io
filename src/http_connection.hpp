@@ -17,7 +17,7 @@ public:
         parser_(std::bind(&HttpConnection::handle_request, this,
                           std::placeholders::_1)) {}
 
-  TaskNoSuspend<void> handle();
+  Task<void> handle();
 
 private:
   AsyncFile conn_;
@@ -26,7 +26,7 @@ private:
   HttpPraser parser_;
   bool stop = {false};
 
-  TaskNoSuspend<void> handle_request(HttpRequest req);
+  Task<void> handle_request(HttpRequest req);
 };
 
 } // namespace co_io

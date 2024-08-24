@@ -24,11 +24,11 @@ public:
   void start(bool new_thread) {
     if (new_thread) {
       th_ = std::jthread([this] {
-        accept();
+        run_task(accept());
         loop_->run();
       });
     } else {
-      accept();
+      run_task(accept());
       loop_->run();
     }
   }
@@ -50,8 +50,8 @@ private:
   unsigned int time_out_sec_ = 0;
   std::jthread th_;
 
-  TaskNoSuspend<void> accept();
-  TaskNoSuspend<void> client(int fd);
+  Task<void> accept();
+  Task<void> client(int fd);
 };
 
 template <typename LoopType> class HttpServer {
@@ -100,24 +100,22 @@ HttpServer<LoopType>::HttpServer(std::string_view ip, std::string port)
     : ip_(ip), port_(port) {}
 
 template <typename LoopType>
-TaskNoSuspend<void> HttpWorker<LoopType>::accept() {
+Task<void> HttpWorker<LoopType>::accept() {
   while (true) {
     AddressSolver::Address addr;
     auto ret = co_await listener_.async_accept(addr);
     if (ret.is_error()) {
-      std::cerr << "accept error " << ret.what() << std::endl;
     } else {
-      client(ret.value());
+      std::cerr << "accept ok " << ret.value() << std::endl;
+      run_task(client(ret.value()));
     }
   }
 }
 
 template <typename LoopType>
-TaskNoSuspend<void> HttpWorker<LoopType>::client(int fd) {
+Task<void> HttpWorker<LoopType>::client(int fd) {
   HttpConnection conn(AsyncFile{fd, loop_.get(), time_out_sec_}, router_);
   co_await conn.handle();
-
-  co_return;
 }
 
 } // namespace co_io

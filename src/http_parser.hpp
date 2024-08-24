@@ -23,11 +23,11 @@ inline std::error_category const &http_parser_category() {
 
 class HttpPraser {
 public:
-  using CallbackRequest = std::function<TaskNoSuspend<void>(HttpRequest)>;
+  using CallbackRequest = std::function<Task<void>(HttpRequest)>;
   HttpPraser(CallbackRequest on_request_complete);
   ~HttpPraser();
 
-  detail::Execpted<size_t> parse(std::string_view data);
+  Execpted<size_t> parse(std::string_view data);
 
 private:
   CallbackRequest on_request_complete_;

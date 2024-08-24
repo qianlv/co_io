@@ -5,7 +5,7 @@
 
 using namespace co_io;
 
-TaskNoSuspend<void> on_request(HttpRequest req) {
+Task<void> on_request(HttpRequest req) {
   std::cerr << http_method(req.method) << " " << req.url << " " << http_version(req.version) << std::endl;
   if (!req.headers.empty()) {
     std::cerr << "headers:\n";

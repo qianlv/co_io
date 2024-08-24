@@ -7,6 +7,8 @@
 #include <sys/select.h>
 #include <unordered_map>
 
+#include "task.hpp"
+
 namespace co_io {
 
 class PollEvent {
@@ -97,5 +99,38 @@ private:
 };
 
 using PollerBasePtr = std::unique_ptr<PollerBase>;
+
+struct PollerPromise : public Promise<void> {
+  int fd_;
+  PollerBase *poller_;
+  PollEvent event_ = PollEvent::read();
+
+  auto get_return_object() {
+    return std::coroutine_handle<PollerPromise>::from_promise(*this);
+  }
+  inline ~PollerPromise() { poller_->remove_event(fd_, event_); }
+
+  PollerPromise &operator=(PollerPromise &&) = delete;
+};
+
+struct PollerAwaiter {
+  int fd_;
+  PollerBase *poller_;
+  PollEvent event_ = PollEvent::read();
+
+  bool await_ready() const noexcept { return false; }
+  void await_suspend(std::coroutine_handle<PollerPromise> h) const {
+    poller_->add_event(fd_, event_, h);
+    h.promise().poller_ = poller_;
+    h.promise().fd_ = fd_;
+    h.promise().event_ = event_;
+  }
+  void await_resume() const noexcept {}
+};
+
+inline Task<void, PollerPromise> waiting_for_event(PollerBase *poller, int fd,
+                                                   PollEvent event) {
+  co_await PollerAwaiter{fd, poller, event};
+}
 
 } // namespace co_io
