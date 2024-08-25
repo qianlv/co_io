@@ -23,7 +23,7 @@ public:
       : clock_fd_(Execpted<int>(::timerfd_create(CLOCK_MONOTONIC, 0))
                       .execption("timerfd_create"),
                   loop) {
-    poll_timer();
+    run_task(poll_timer());
   }
 
   uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,

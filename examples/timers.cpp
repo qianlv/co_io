@@ -14,6 +14,7 @@ Task<void> pause_echo(int i);
 
 Task<void> pause_echo(int i) {
   co_await loop->timer()->sleep_for(std::chrono::seconds(i));
+  std::cerr << "pause echo " << count << " " << i << std::endl;
   count += 1;
 }
 
@@ -32,7 +33,7 @@ int main(int argc, char *argv[]) {
 
   run_task(loop->timer()->delay_run(std::chrono::seconds(n), []() {
     std::cerr << "delay run" << std::endl;
-    pause_echo(1);
+    run_task(pause_echo(1));
   }));
 
   loop->run();

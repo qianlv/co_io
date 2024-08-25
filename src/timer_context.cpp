@@ -62,6 +62,7 @@ Task<void> TimerContext::poll_timer() {
   while (true) {
     uint64_t exp = 0;
     co_await clock_fd_.async_read(reinterpret_cast<void *>(&exp), sizeof(exp));
+    std::cerr << "poll_timer " << exp << std::endl;
 
     while (!timers_.empty() &&
            timers_.top().expired_time <= std::chrono::steady_clock::now()) {

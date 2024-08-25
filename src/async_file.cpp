@@ -14,48 +14,13 @@ AsyncFile::AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec)
 
 Task<Execpted<ssize_t>> AsyncFile::async_read(void *buf, size_t size) {
   while (true) {
-    if (time_out_sec_ > 0) {
-      co_await when_any(
-          waiting_for_event(loop_->poller(), fd(), PollEvent::read()),
-          loop_->timer()->sleep_for(std::chrono::seconds(time_out_sec_)));
-    } else {
-      co_await waiting_for_event(loop_->poller(), fd(), PollEvent::read());
-    }
+    co_await waiting_for_event(loop_->poller(), fd(), PollEvent::read());
     auto result = system_call(::read(fd(), buf, size));
     if (result.is_nonblocking_error()) {
       continue;
     }
     co_return result;
   }
-  // auto task = async_r<ssize_t>(
-  //     [fd = this->fd(), buf, size]() {
-  //       return detail::system_call(::read(fd, buf, size));
-  //     },
-  //     PollEvent::read());
-  // auto task_handle = task.get_handle();
-  // uint32_t timer_id = 0;
-  // bool has_timer = false;
-  // if (time_out_sec_ > 0) {
-  //   has_timer = true;
-  //   timer_id = loop_->timer()->add_timer(
-  //       std::chrono::steady_clock::now() +
-  //       std::chrono::seconds(time_out_sec_), [fd = this->fd(), loop =
-  //       this->loop_, task_handle] {
-  //         task_handle.promise().is_timeout = true;
-  //         loop->poller()->remove_event(fd, PollEvent::read());
-  //         task_handle.resume();
-  //       });
-  // }
-  //
-  // loop_->poller()->add_event(
-  //     this->fd(), PollEvent::read(),
-  //     [timer_id, has_timer, task_handle, loop = this->loop_] {
-  //       if (has_timer) {
-  //         loop->timer()->cancel_timer(timer_id);
-  //       }
-  //       task_handle.resume();
-  //     });
-  // return FinalAwaiter<detail::Execpted<ssize_t>>{std::move(task)};
 }
 
 Task<Execpted<ssize_t>> AsyncFile::async_read(ByteBuffer &buf) {
