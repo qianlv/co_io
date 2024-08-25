@@ -4,6 +4,7 @@
 #include "task.hpp"
 #include "void_type.hpp"
 #include <span>
+#include <vector>
 
 namespace co_io {
 
@@ -66,5 +67,13 @@ inline Task<WhenAnyResult<typename VoidType<
   return when_any_impl(std::make_index_sequence<sizeof...(Awaiters)>{},
                        std::forward<Awaiters>(tasks)...);
 }
+
+// template <std::size_t... Is, Awaitable Awaiter>
+// inline auto when_any(const std::<Awaiter> &tasks,
+//                      std::index_sequence<Is...>) {
+//   return when_any(tasks[Is]...);
+// }
+//
+// template <std::size_t N>
 
 } // namespace co_io

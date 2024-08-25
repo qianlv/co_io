@@ -6,13 +6,7 @@ namespace co_io {
 
 uint32_t
 TimerContext::add_timer(std::chrono::steady_clock::time_point expired_time,
-                        std::coroutine_handle<> coroutine) {
-  return add_timer(expired_time, [coroutine]() { coroutine.resume(); });
-}
-
-uint32_t
-TimerContext::add_timer(std::chrono::steady_clock::time_point expired_time,
-                        std::function<void()> callback) {
+                        std::coroutine_handle<> callback) {
 
   bool is_reset =
       (timers_.empty() || expired_time < timers_.top().expired_time);
@@ -62,7 +56,6 @@ Task<void> TimerContext::poll_timer() {
   while (true) {
     uint64_t exp = 0;
     co_await clock_fd_.async_read(reinterpret_cast<void *>(&exp), sizeof(exp));
-    std::cerr << "poll_timer " << exp << std::endl;
 
     while (!timers_.empty() &&
            timers_.top().expired_time <= std::chrono::steady_clock::now()) {
@@ -80,18 +73,17 @@ Task<void> TimerContext::poll_timer() {
 
 Task<void>
 TimerContext::sleep_until(std::chrono::steady_clock::time_point expireTime) {
-  co_await SleepAwaiter(expireTime, this);
+  co_await waiting_for_timer(expireTime);
 }
 
 Task<void>
 TimerContext::sleep_for(std::chrono::steady_clock::duration duration) {
-  co_await SleepAwaiter(std::chrono::steady_clock::now() + duration, this);
+  co_await waiting_for_timer(std::chrono::steady_clock::now() + duration);
 }
 
-Task<void>
-TimerContext::delay_run(std::chrono::steady_clock::duration duration,
-                        std::function<void()> func) {
-  co_await sleep_for(duration);
+Task<void> TimerContext::delay_run(std::chrono::steady_clock::duration duration,
+                                   std::function<void()> func) {
+  co_await waiting_for_timer(std::chrono::steady_clock::now() + duration);
   func();
 }
 

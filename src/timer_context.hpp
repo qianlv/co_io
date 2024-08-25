@@ -28,8 +28,8 @@ public:
 
   uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,
                      std::coroutine_handle<> coroutine);
-  uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,
-                     std::function<void()> callback);
+  // uint32_t add_timer(std::chrono::steady_clock::time_point expired_time,
+  //                    std::function<void()> callback);
 
   void cancel_timer(uint64_t id);
 
@@ -41,7 +41,7 @@ public:
 private:
   struct TimerEntry {
     std::chrono::steady_clock::time_point expired_time;
-    std::function<void()> callback;
+    std::coroutine_handle<> callback;
     uint64_t id;
 
     bool operator<(const TimerEntry &other) const noexcept {
@@ -49,16 +49,42 @@ private:
     }
   };
 
+  struct TimerPromise : public Promise<void> {
+    TimerContext *timer_context;
+    uint32_t timer_id_;
+    bool completed = false;
+
+    auto get_return_object() {
+      return std::coroutine_handle<TimerPromise>::from_promise(*this);
+    }
+    inline ~TimerPromise() {
+      if (!completed) {
+        timer_context->cancel_timer(timer_id_);
+      }
+    }
+
+    PollerPromise &operator=(PollerPromise &&) = delete;
+  };
+
   struct SleepAwaiter {
     bool await_ready() const noexcept { return false; }
-    void await_suspend(std::coroutine_handle<> handle_) const noexcept {
-      timer_context->add_timer(expired_time, handle_);
+    void await_suspend(std::coroutine_handle<TimerPromise> h) noexcept {
+      handle_ = h;
+      auto &promise = h.promise();
+      promise.timer_context = timer_context_;
+      promise.timer_id_ = timer_context_->add_timer(expired_time_, h);
     }
-    void await_resume() const noexcept { return; }
+    void await_resume() const noexcept { handle_.promise().completed = true; }
 
-    std::chrono::steady_clock::time_point expired_time;
-    TimerContext *timer_context;
+    std::chrono::steady_clock::time_point expired_time_;
+    TimerContext *timer_context_;
+    std::coroutine_handle<TimerPromise> handle_{};
   };
+
+  inline Task<void, TimerPromise>
+  waiting_for_timer(std::chrono::steady_clock::time_point expireTime) {
+    co_await SleepAwaiter{expireTime, this};
+  }
 
   void reset();
 
