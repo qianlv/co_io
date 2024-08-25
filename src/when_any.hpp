@@ -8,8 +8,8 @@
 
 namespace co_io {
 
-template <typename... Ts> struct WhenAnyResult {
-  std::variant<Ts...> value{};
+template <typename T> struct WhenAnyResult {
+  T value;
   size_t index = {size_t(-1)};
 };
 
@@ -31,25 +31,37 @@ struct WhenAnyAwaiter {
   std::span<const Task<void>> tasks_;
 };
 
-template <size_t index, typename... Ts>
-inline Task<void> when_any_helper(const auto &task,
-                                  WhenAnyResult<Ts...> &result) {
+template <size_t index, typename T>
+inline Task<void> when_any_helper(const auto &task, WhenAnyResult<T> &result) {
   using return_type = typename std::decay_t<decltype(task)>::return_type;
   if constexpr (std::is_void_v<return_type>) {
     co_await task;
-  } else {
+  } else { // multiple types, std::variant
     result.value.template emplace<index>(co_await task);
+  }
+  result.index = index;
+}
+
+template <typename T>
+inline Task<void> when_any_helper(const auto &task, WhenAnyResult<T> &result,
+                                  size_t index) {
+  using return_type = typename std::decay_t<decltype(task)>::return_type;
+  if constexpr (std::is_void_v<return_type>) {
+    co_await task;
+  } else { // only one type for return_type
+    result.value = (co_await task);
   }
   result.index = index;
 }
 
 template <std::size_t... Is, Awaitable... Awaiters>
   requires(HasReturnType<Awaiters> && ...)
-inline Task<
-    WhenAnyResult<typename VoidType<typename Awaiters::return_type>::type...>>
+inline Task<WhenAnyResult<
+    std::variant<typename VoidType<typename Awaiters::return_type>::type...>>>
 when_any_impl(std::index_sequence<Is...>, Awaiters &&...tasks) {
   auto self = co_await Self<>{};
-  WhenAnyResult<typename VoidType<typename Awaiters::return_type>::type...>
+  WhenAnyResult<
+      std::variant<typename VoidType<typename Awaiters::return_type>::type...>>
       results{};
   Task<void> new_tasks[]{when_any_helper<Is>(tasks, results)...};
   for (auto &task : new_tasks) {
@@ -60,20 +72,40 @@ when_any_impl(std::index_sequence<Is...>, Awaiters &&...tasks) {
   co_return results;
 }
 
+template <Awaitable Awaiter>
+  requires(HasReturnType<Awaiter>)
+inline Task<
+    WhenAnyResult<typename VoidType<typename Awaiter::return_type>::type>>
+when_any_impl(const std::vector<Awaiter> &tasks) {
+  auto self = co_await Self<>{};
+  WhenAnyResult<typename VoidType<typename Awaiter::return_type>::type>
+      results{};
+  std::vector<Task<void>> new_tasks;
+  new_tasks.reserve(tasks.size());
+  for (std::size_t i = 0; i < tasks.size(); ++i) {
+    auto new_task = when_any_helper(tasks[i], results, i);
+    new_task.handle().promise().previous_handle_ = self;
+    new_tasks.emplace_back(std::move(new_task));
+  }
+
+  co_await WhenAnyAwaiter{new_tasks};
+  co_return results;
+}
+
 template <Awaitable... Awaiters>
   requires(sizeof...(Awaiters) > 0) && (HasReturnType<Awaiters> && ...)
-inline Task<WhenAnyResult<typename VoidType<
-    typename Awaiters::return_type>::type...>> when_any(Awaiters &&...tasks) {
+inline Task<WhenAnyResult<std::variant<typename VoidType<
+    typename Awaiters::return_type>::type...>>> when_any(Awaiters &&...tasks) {
   return when_any_impl(std::make_index_sequence<sizeof...(Awaiters)>{},
                        std::forward<Awaiters>(tasks)...);
 }
 
-// template <std::size_t... Is, Awaitable Awaiter>
-// inline auto when_any(const std::<Awaiter> &tasks,
-//                      std::index_sequence<Is...>) {
-//   return when_any(tasks[Is]...);
-// }
-//
-// template <std::size_t N>
+template <Awaitable Awaiter>
+  requires(HasReturnType<Awaiter>)
+inline Task<
+    WhenAnyResult<typename VoidType<typename Awaiter::return_type>::type>>
+when_any(const std::vector<Awaiter> &tasks) {
+  return when_any_impl(tasks);
+}
 
 } // namespace co_io
