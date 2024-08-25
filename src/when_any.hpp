@@ -76,7 +76,7 @@ template <Awaitable Awaiter>
   requires(HasReturnType<Awaiter>)
 inline Task<
     WhenAnyResult<typename VoidType<typename Awaiter::return_type>::type>>
-when_any_impl(const std::vector<Awaiter> &tasks) {
+when_any(const std::vector<Awaiter> &tasks) {
   auto self = co_await Self<>{};
   WhenAnyResult<typename VoidType<typename Awaiter::return_type>::type>
       results{};
@@ -98,14 +98,6 @@ inline Task<WhenAnyResult<std::variant<typename VoidType<
     typename Awaiters::return_type>::type...>>> when_any(Awaiters &&...tasks) {
   return when_any_impl(std::make_index_sequence<sizeof...(Awaiters)>{},
                        std::forward<Awaiters>(tasks)...);
-}
-
-template <Awaitable Awaiter>
-  requires(HasReturnType<Awaiter>)
-inline Task<
-    WhenAnyResult<typename VoidType<typename Awaiter::return_type>::type>>
-when_any(const std::vector<Awaiter> &tasks) {
-  return when_any_impl(tasks);
 }
 
 } // namespace co_io
