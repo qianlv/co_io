@@ -1,9 +1,9 @@
 #include "async_file.hpp"
 #include "loop.hpp"
 #include "system_call.hpp"
+#include "when_any.hpp"
 
 namespace co_io {
-
 
 AsyncFile::AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec)
     : FileDescriptor(fd), loop_(loop), time_out_sec_(time_out_sec) {
@@ -14,7 +14,13 @@ AsyncFile::AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec)
 
 Task<Execpted<ssize_t>> AsyncFile::async_read(void *buf, size_t size) {
   while (true) {
-    co_await waiting_for_event(loop_->poller(), fd(), PollEvent::read());
+    if (time_out_sec_ > 0) {
+      co_await when_any(
+          waiting_for_event(loop_->poller(), fd(), PollEvent::read()),
+          loop_->timer()->sleep_for(std::chrono::seconds(time_out_sec_)));
+    } else {
+      co_await waiting_for_event(loop_->poller(), fd(), PollEvent::read());
+    }
     auto result = system_call(::read(fd(), buf, size));
     if (result.is_nonblocking_error()) {
       continue;

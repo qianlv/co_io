@@ -33,8 +33,8 @@ public:
 
   void cancel_timer(uint64_t id);
 
-  SleepAwaiter sleep_until(std::chrono::steady_clock::time_point expireTime);
-  SleepAwaiter sleep_for(std::chrono::steady_clock::duration duration);
+  Task<void> sleep_until(std::chrono::steady_clock::time_point expireTime);
+  Task<void> sleep_for(std::chrono::steady_clock::duration duration);
   Task<void> delay_run(std::chrono::steady_clock::duration duration,
                        std::function<void()> func);
 

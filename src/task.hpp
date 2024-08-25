@@ -1,110 +1,27 @@
 #pragma once
+#include <cassert>
 #include <coroutine>
 #include <exception>
 #include <iostream>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace co_io {
 
-// template <typename T> struct TmpPromise;
-// template <> struct TmpPromise<void>;
-//
-// template <typename Ret = void> class TaskNoSuspend {
-// public:
-//   using promise_type = TmpPromise<Ret>;
-//   TaskNoSuspend(std::coroutine_handle<promise_type> handle)
-//       : m_handle(handle) {}
-//   TaskNoSuspend() = default;
-//   TaskNoSuspend(TaskNoSuspend &&other) = default;
-//   TaskNoSuspend &operator=(TaskNoSuspend &&other) = default;
-//   ~TaskNoSuspend() {}
-//
-//   TaskNoSuspend(const TaskNoSuspend &) = delete;
-//   TaskNoSuspend &operator=(const TaskNoSuspend &) = delete;
-//
-//   struct Awaiter {
-//     std::coroutine_handle<promise_type> callee;
-//     bool await_ready() { return false; }
-//     void await_suspend(std::coroutine_handle<> caller) {
-//       callee.promise().previous_handle_ = caller;
-//     }
-//     Ret await_resume() { return callee.promise().result(); }
-//   };
-//
-//   Awaiter operator co_await() { return Awaiter{m_handle}; }
-//
-//   std::coroutine_handle<promise_type> m_handle;
-// };
-//
-// template <typename T> struct TmpPromise {
-//   std::exception_ptr exception_;
-//   T return_value_;
-//   std::coroutine_handle<> previous_handle_ = nullptr;
-//   using handle_type = std::coroutine_handle<TmpPromise>;
-//   TaskNoSuspend<T> get_return_object() {
-//     return handle_type::from_promise(*this);
-//   }
-//   std::suspend_never initial_suspend() { return {}; }
-//   std::suspend_never final_suspend() noexcept { return {}; }
-//   auto return_value(T value) noexcept {
-//     // std::cerr << "this " << handle_type::from_promise(*this).address()
-//     //           << std::endl;
-//     // std::cerr << "return value: " << std::endl;
-//     return_value_ = std::move(value);
-//     // std::cerr << "previous_handle_ " << previous_handle_.address() <<
-//     // std::endl;
-//     if (previous_handle_) {
-//       previous_handle_.resume();
-//     }
-//   }
-//   void unhandled_exception() {
-//     std::cerr << "unhandled exception in coroutine\n";
-//     exception_ = std::current_exception();
-//     if (previous_handle_) {
-//       previous_handle_.resume();
-//     }
-//   }
-//
-//   T result() {
-//     if (exception_) {
-//       std::rethrow_exception(exception_);
-//     }
-//     return return_value_;
-//   }
-// };
-//
-// template <> struct TmpPromise<void> {
-//   std::exception_ptr exception_;
-//   std::coroutine_handle<> previous_handle_ = nullptr;
-//   using handle_type = std::coroutine_handle<TmpPromise<void>>;
-//   TaskNoSuspend<void> get_return_object() {
-//     return handle_type::from_promise(*this);
-//   }
-//
-//   std::suspend_never initial_suspend() { return {}; }
-//   std::suspend_never final_suspend() noexcept { return {}; }
-//
-//   void return_void() noexcept {
-//     if (previous_handle_) {
-//       previous_handle_.resume();
-//     }
-//   }
-//
-//   void unhandled_exception() {
-//     std::cerr << "unhandled exception in coroutine void\n";
-//     exception_ = std::current_exception();
-//     if (previous_handle_) {
-//       previous_handle_.resume();
-//     }
-//   }
-//
-//   void result() {
-//     if (exception_) {
-//       std::rethrow_exception(exception_);
-//     }
-//   }
-// };
+struct Self {
+  bool await_ready() { return false; }
+
+  bool await_suspend(std::coroutine_handle<> h) {
+    // std::cerr << "self = " << h.address() << std::endl;
+    H = h;
+    return false;
+  }
+
+  auto await_resume() noexcept { return H; }
+
+  std::coroutine_handle<> H;
+};
 
 struct PreviousAwaiter {
   std::coroutine_handle<> previous_handle_;
@@ -153,7 +70,10 @@ template <> struct Promise<void> {
   }
 
   std::suspend_always initial_suspend() { return {}; }
-  auto final_suspend() noexcept { return PreviousAwaiter{previous_handle_}; }
+  auto final_suspend() noexcept {
+    assert(previous_handle_);
+    return PreviousAwaiter{previous_handle_};
+  }
   auto return_void() noexcept { result_ = nullptr; }
   void unhandled_exception() { result_ = std::current_exception(); }
 
@@ -171,6 +91,7 @@ public:
   using promise_type = P;
 
   Task(std::coroutine_handle<promise_type> handle) noexcept : handle_(handle) {
+    // std::cerr << "Task " << handle.address() << std::endl;
   }
   Task(Task &&other) noexcept : handle_(other.handle_) {
     other.handle_ = nullptr;
@@ -185,7 +106,10 @@ public:
 
   ~Task() {
     if (handle_) {
+      // std::cerr << "~Task " << handle_.address() << std::endl;
       handle_.destroy();
+    } else {
+      // std::cerr << "~Task nullptr" << std::endl;
     }
   }
 
@@ -203,7 +127,7 @@ public:
     T await_resume() const { return handle_.promise().result(); }
   };
 
-  Awaiter operator co_await() { return {handle_}; }
+  Awaiter operator co_await() const noexcept { return {handle_}; }
 
   std::coroutine_handle<promise_type> handle() const noexcept {
     return handle_;
@@ -213,7 +137,6 @@ public:
     return std::exchange(handle_, nullptr);
   }
 
-
 private:
   std::coroutine_handle<promise_type> handle_;
 };
@@ -222,6 +145,7 @@ struct AutoDestoryPromise {
   struct AutoDestoryAwaiter {
     bool await_ready() const noexcept { return false; }
     void await_suspend(std::coroutine_handle<> h) const noexcept {
+      // std::cerr << "AutoDestoryAwaiter " << h.address() << std::endl;
       h.destroy();
     }
     void await_resume() const noexcept {}
@@ -246,11 +170,22 @@ Task<void, AutoDestoryPromise> auto_destory(Task<T> task) {
   (void)co_await task;
 }
 
-template <typename T>
-auto run_task(Task<T> task) {
+template <typename T> auto run_task(Task<T> task) {
   auto wrapper = auto_destory(std::move(task));
   auto handle = wrapper.release();
   handle.resume();
 }
+
+template <class A>
+concept Awaiter = requires(A a, std::coroutine_handle<> h) {
+  { a.await_ready() };
+  { a.await_suspend(h) };
+  { a.await_resume() };
+};
+
+template <class A>
+concept Awaitable = Awaiter<A> || requires(A a) {
+  { a.operator co_await() } -> Awaiter;
+};
 
 } // namespace co_io

@@ -77,14 +77,14 @@ Task<void> TimerContext::poll_timer() {
   }
 }
 
-TimerContext::SleepAwaiter
+Task<void>
 TimerContext::sleep_until(std::chrono::steady_clock::time_point expireTime) {
-  return SleepAwaiter(expireTime, this);
+  co_await SleepAwaiter(expireTime, this);
 }
 
-TimerContext::SleepAwaiter
+Task<void>
 TimerContext::sleep_for(std::chrono::steady_clock::duration duration) {
-  return SleepAwaiter(std::chrono::steady_clock::now() + duration, this);
+  co_await SleepAwaiter(std::chrono::steady_clock::now() + duration, this);
 }
 
 Task<void>
