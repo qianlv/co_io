@@ -89,6 +89,7 @@ template <> struct Promise<void> {
 template <typename T, typename P = Promise<T>> class Task {
 public:
   using promise_type = P;
+  using return_type = T;
 
   Task(std::coroutine_handle<promise_type> handle) noexcept : handle_(handle) {
     // std::cerr << "Task " << handle.address() << std::endl;

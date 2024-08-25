@@ -14,6 +14,9 @@ AsyncFile::AsyncFile(int fd, LoopBase *loop, unsigned time_out_sec)
 
 Task<Execpted<ssize_t>> AsyncFile::async_read(void *buf, size_t size) {
   while (true) {
+    // if (time_out_sec_ > 0) {
+    //   auto ret = co_await when_any(waiting_for_event(loop_->poller(), fd(), PollEvent::read()),
+    // }
     co_await waiting_for_event(loop_->poller(), fd(), PollEvent::read());
     auto result = system_call(::read(fd(), buf, size));
     if (result.is_nonblocking_error()) {
