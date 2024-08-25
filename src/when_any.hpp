@@ -1,5 +1,6 @@
 #pragma once
 
+#include "concepts.hpp"
 #include "task.hpp"
 #include "void_type.hpp"
 #include <span>
@@ -41,15 +42,12 @@ inline Task<void> when_any_helper(const auto &task,
   result.index = index;
 }
 
-template <typename Ts>
-concept HasReturnType = requires { typename Ts::return_type; };
-
 template <std::size_t... Is, Awaitable... Awaiters>
   requires(HasReturnType<Awaiters> && ...)
 inline Task<
     WhenAnyResult<typename VoidType<typename Awaiters::return_type>::type...>>
 when_any_impl(std::index_sequence<Is...>, Awaiters &&...tasks) {
-  auto self = co_await Self{};
+  auto self = co_await Self<>{};
   WhenAnyResult<typename VoidType<typename Awaiters::return_type>::type...>
       results{};
   Task<void> new_tasks[]{when_any_helper<Is>(tasks, results)...};

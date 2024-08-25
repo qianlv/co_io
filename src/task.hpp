@@ -5,15 +5,28 @@
 #include <iostream>
 #include <utility>
 #include <variant>
-#include <vector>
 
 namespace co_io {
 
+template <typename P = void>
 struct Self {
   bool await_ready() { return false; }
 
+  bool await_suspend(std::coroutine_handle<P> h) {
+    H = h;
+    return false;
+  }
+
+  auto await_resume() noexcept { return H; }
+
+  std::coroutine_handle<P> H;
+};
+
+template <>
+struct Self<void> {
+  bool await_ready() { return false; }
+
   bool await_suspend(std::coroutine_handle<> h) {
-    // std::cerr << "self = " << h.address() << std::endl;
     H = h;
     return false;
   }
@@ -22,6 +35,7 @@ struct Self {
 
   std::coroutine_handle<> H;
 };
+
 
 struct PreviousAwaiter {
   std::coroutine_handle<> previous_handle_;
@@ -134,6 +148,10 @@ public:
     return handle_;
   }
 
+  operator std::coroutine_handle<promise_type>() const noexcept {
+    return handle_;
+  }
+
   std::coroutine_handle<promise_type> release() noexcept {
     return std::exchange(handle_, nullptr);
   }
@@ -176,17 +194,5 @@ template <typename T> auto run_task(Task<T> task) {
   auto handle = wrapper.release();
   handle.resume();
 }
-
-template <class A>
-concept Awaiter = requires(A a, std::coroutine_handle<> h) {
-  { a.await_ready() };
-  { a.await_suspend(h) };
-  { a.await_resume() };
-};
-
-template <class A>
-concept Awaitable = Awaiter<A> || requires(A a) {
-  { a.operator co_await() } -> Awaiter;
-};
 
 } // namespace co_io
