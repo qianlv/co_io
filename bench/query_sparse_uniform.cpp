@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
 
-#include "adaptive_radix_tree.hpp"
+#include "utils/adaptive_radix_tree.hpp"
 #include <map>
 #include <random>
 #include <unordered_map>

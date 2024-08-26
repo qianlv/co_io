@@ -1,12 +1,12 @@
 #pragma once
 
+#include "utils/byte_buffer.hpp"
+
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <string>
 #include <unordered_map>
-
-#include "byte_buffer.hpp"
 
 namespace co_io {
 
@@ -83,13 +83,9 @@ struct HttpRequest {
     }
   }
 
-  void set_http_method(std::string_view m) {
-    method = http_method(m);
-  }
+  void set_http_method(std::string_view m) { method = http_method(m); }
 
-  void set_http_version(std::string_view v) {
-    version = http_version(v);
-  }
+  void set_http_version(std::string_view v) { version = http_version(v); }
 
   void clear() {
     headers.clear();

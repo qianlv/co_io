@@ -7,10 +7,9 @@
 #include <unistd.h>
 #include <utility>
 
-#include "byte_buffer.hpp"
-#include "poller.hpp"
-#include "system_call.hpp"
-#include "task.hpp"
+#include "utils/byte_buffer.hpp"
+#include "utils/system_call.hpp"
+#include "coroutine/task.hpp"
 
 namespace co_io {
 

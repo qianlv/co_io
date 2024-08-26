@@ -1,8 +1,8 @@
 #pragma once
 
-#include "adaptive_radix_tree.hpp"
-#include "http_endpoint.hpp"
-#include "http_util.hpp"
+#include "http/http_endpoint.hpp"
+#include "http/http_util.hpp"
+#include "utils/adaptive_radix_tree.hpp"
 #include <string>
 
 namespace co_io {

@@ -1,15 +1,15 @@
 #include <iostream>
 
-#include "async_file.hpp"
-#include "loop.hpp"
-#include "task.hpp"
+#include "coroutine/task.hpp"
+#include "io/async_file.hpp"
+#include "io/loop.hpp"
 
 using namespace co_io;
 
 Task<void> echo(std::string_view ip, std::string_view port,
-                         std::shared_ptr<LoopBase> loop);
+                std::shared_ptr<LoopBase> loop);
 Task<void> echo(std::string_view ip, std::string_view port,
-                         std::shared_ptr<LoopBase> loop) {
+                std::shared_ptr<LoopBase> loop) {
   AsyncFile stdin_file{STDIN_FILENO, loop.get()};
   AddressSolver solver{ip, port};
   AddressSolver::AddressInfo info = solver.get_address_info();

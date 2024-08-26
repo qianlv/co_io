@@ -1,9 +1,9 @@
 #pragma once
 
-#include "http_util.hpp"
+#include "coroutine/task.hpp"
+#include "http/http_util.hpp"
 #include "llhttp.h"
-#include "system_call.hpp"
-#include "task.hpp"
+#include "utils/system_call.hpp"
 
 #include <functional>
 #include <string>

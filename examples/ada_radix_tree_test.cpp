@@ -1,7 +1,7 @@
-#include "adaptive_radix_tree.hpp"
+#include "utils/adaptive_radix_tree.hpp"
+#include <fstream>
 #include <random>
 #include <vector>
-#include <fstream>
 
 void test1() {
   AdaptiveRadixTree<int> tree;

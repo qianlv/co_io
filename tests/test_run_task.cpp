@@ -1,4 +1,4 @@
-#include "task.hpp"
+#include "coroutine/task.hpp"
 
 using namespace co_io;
 
@@ -7,7 +7,7 @@ Task<void> task(int id) {
   co_return;
 }
 
-int main () {
+int main() {
   run_task(task(1));
   return 0;
 }

@@ -1,8 +1,13 @@
-#include "http_server.hpp"
-#include "loop.hpp"
+#include "http/http_server.hpp"
+#include "io/loop.hpp"
 
-int main() {
+int main(int argc, const char *argv[]) {
+  unsigned int time_out_sec = 0;
+  if (argc > 1) {
+    time_out_sec = atoi(argv[1]);
+  }
   co_io::HttpServer<co_io::EPollLoop> http("localhost", "12345");
+  http.with_timeout(time_out_sec);
   // co_io::HttpServer<co_io::SelectLoop> http("localhost", "12345");
   http.route().route(
       "/", co_io::HttpMethod::GET,

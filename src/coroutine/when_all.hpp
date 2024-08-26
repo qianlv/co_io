@@ -1,8 +1,8 @@
 #pragma once
 
-#include "concepts.hpp"
-#include "task.hpp"
-#include "void_type.hpp"
+#include "coroutine/task.hpp"
+#include "utils/concepts.hpp"
+#include "utils/void_type.hpp"
 #include <span>
 
 namespace co_io {
@@ -28,7 +28,6 @@ struct WhenAllAwaiter {
 
   std::span<const Task<void>> tasks_;
 };
-
 
 template <size_t index, typename... Ts>
 inline Task<void> when_all_helper(const auto &task,

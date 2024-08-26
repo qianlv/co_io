@@ -1,8 +1,8 @@
 #pragma once
 
-#include "concepts.hpp"
-#include "task.hpp"
-#include "void_type.hpp"
+#include "coroutine/task.hpp"
+#include "utils/void_type.hpp"
+#include "utils/concepts.hpp"
 #include <span>
 #include <vector>
 

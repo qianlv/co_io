@@ -3,12 +3,13 @@
 #include <chrono>
 #include <coroutine>
 #include <fcntl.h>
+#include <functional>
 #include <queue>
 #include <sys/timerfd.h>
 #include <unordered_set>
 
-#include "async_file.hpp"
-#include "task.hpp"
+#include "coroutine/task.hpp"
+#include "io/async_file.hpp"
 
 namespace co_io {
 
@@ -59,11 +60,12 @@ private:
     }
     inline ~TimerPromise() {
       if (!completed) {
+        // std::cerr << "TimerPromise not completed" << std::endl;
         timer_context->cancel_timer(timer_id_);
       }
     }
 
-    PollerPromise &operator=(PollerPromise &&) = delete;
+    TimerPromise &operator=(TimerPromise &&) = delete;
   };
 
   struct SleepAwaiter {

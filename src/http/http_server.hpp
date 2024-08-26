@@ -1,10 +1,11 @@
 #pragma once
 
-#include "async_file.hpp"
-#include "http_connection.hpp"
-#include "http_router.hpp"
-#include "loop.hpp"
-#include "task.hpp"
+#include "coroutine/task.hpp"
+#include "http/http_connection.hpp"
+#include "http/http_router.hpp"
+#include "io/async_file.hpp"
+#include "io/loop.hpp"
+
 #include <memory>
 #include <thread>
 
@@ -99,8 +100,7 @@ template <typename LoopType>
 HttpServer<LoopType>::HttpServer(std::string_view ip, std::string port)
     : ip_(ip), port_(port) {}
 
-template <typename LoopType>
-Task<void> HttpWorker<LoopType>::accept() {
+template <typename LoopType> Task<void> HttpWorker<LoopType>::accept() {
   while (true) {
     AddressSolver::Address addr;
     auto ret = co_await listener_.async_accept(addr);
@@ -112,8 +112,7 @@ Task<void> HttpWorker<LoopType>::accept() {
   }
 }
 
-template <typename LoopType>
-Task<void> HttpWorker<LoopType>::client(int fd) {
+template <typename LoopType> Task<void> HttpWorker<LoopType>::client(int fd) {
   HttpConnection conn(AsyncFile{fd, loop_.get(), time_out_sec_}, router_);
   co_await conn.handle();
 }

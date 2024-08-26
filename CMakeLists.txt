@@ -17,8 +17,10 @@ add_compile_options(${COMPILE_FLAGS})
 
 project(co_io LANGUAGES CXX)
 
-file(GLOB SOURCES "src/*.cpp")
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+file(GLOB_RECURSE HEADERS "src/*.hpp")
 add_library(co_io STATIC ${SOURCES})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 include(FetchContent)
 FetchContent_Declare(llhttp
