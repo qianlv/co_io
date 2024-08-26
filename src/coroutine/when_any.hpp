@@ -4,6 +4,7 @@
 #include "utils/void_type.hpp"
 #include "utils/concepts.hpp"
 #include <span>
+#include <variant>
 #include <vector>
 
 namespace co_io {

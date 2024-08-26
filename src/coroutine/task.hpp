@@ -4,7 +4,8 @@
 #include <exception>
 #include <iostream>
 #include <utility>
-#include <variant>
+
+#include "utils/uninitialized.hpp"
 
 namespace co_io {
 
@@ -52,7 +53,8 @@ struct PreviousAwaiter {
 
 template <typename T = void> struct Promise {
   std::coroutine_handle<> previous_handle_{};
-  std::variant<T, std::exception_ptr> result_{};
+  std::exception_ptr exception_{};
+  Uninitialized<T> result_;
 
   auto get_return_object() {
     return std::coroutine_handle<Promise>::from_promise(*this);
@@ -62,14 +64,13 @@ template <typename T = void> struct Promise {
   auto final_suspend() noexcept { return PreviousAwaiter{previous_handle_}; }
   auto return_value(T &&value) { result_ = std::move(value); }
   auto return_value(const T &value) noexcept { result_ = value; }
-  void unhandled_exception() { result_ = std::current_exception(); }
+  void unhandled_exception() { exception_ = std::current_exception(); }
 
   T result() {
-    auto r = std::get_if<T>(&result_);
-    if (r) [[likely]] {
-      return std::move(*r);
+    if (exception_) [[unlikely]] {
+      std::rethrow_exception(exception_);
     }
-    std::rethrow_exception(std::get<std::exception_ptr>(result_));
+    return result_.move();
   }
 
   Promise &operator=(Promise &&) = delete;
