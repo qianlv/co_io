@@ -39,6 +39,11 @@ public:
   Task<void> delay_run(std::chrono::steady_clock::duration duration,
                        std::function<void()> func);
 
+  void stop() {
+    stop_ = true;
+    add_timer(std::chrono::steady_clock::now(), nullptr);
+  }
+
 private:
   struct TimerEntry {
     std::chrono::steady_clock::time_point expired_time;
@@ -96,6 +101,7 @@ private:
   std::unordered_set<uint64_t> cancel_timers_;
   AsyncFile clock_fd_;
   uint32_t next_timer_id_ = 0;
+  bool stop_{false};
 };
 
 using TimerContextPtr = std::unique_ptr<TimerContext>;

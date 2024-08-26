@@ -29,7 +29,10 @@ public:
     }
   }
 
-  void stop() override { stop_ = true; }
+  void stop() override {
+    stop_ = true;
+    timer_->stop();
+  }
 
 private:
   PollerBasePtr poller_;

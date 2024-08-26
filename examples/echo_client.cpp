@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
     loop.reset(new SelectLoop());
   }
 
-  auto t = echo(ip, port, loop);
+  run_task(echo(ip, port, loop));
 
   loop->run();
   return 0;

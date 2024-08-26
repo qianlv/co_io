@@ -9,7 +9,7 @@ TimerContext::add_timer(std::chrono::steady_clock::time_point expired_time,
                         std::coroutine_handle<> callback) {
 
   bool is_reset =
-      (timers_.empty() || expired_time < timers_.top().expired_time);
+      (timers_.empty() || expired_time < timers_.top().expired_time || stop_);
   timers_.emplace(expired_time, std::move(callback), ++next_timer_id_);
   if (is_reset) {
     reset();
@@ -53,9 +53,12 @@ void TimerContext::reset() {
 }
 
 Task<void> TimerContext::poll_timer() {
-  while (true) {
+  while (!stop_) {
     uint64_t exp = 0;
     co_await clock_fd_.async_read(reinterpret_cast<void *>(&exp), sizeof(exp));
+    if (stop_) {
+      break;
+    }
 
     while (!timers_.empty() &&
            timers_.top().expired_time <= std::chrono::steady_clock::now()) {
