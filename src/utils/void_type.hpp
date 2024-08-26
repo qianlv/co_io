@@ -1,11 +1,9 @@
 #pragma once
 
-template <typename T = void> struct VoidType {
-  using type = T;
-};
+template <typename T = void> struct VoidType { using type = T; };
 
 template <> struct VoidType<void> {
-  using type = VoidType;
+    using type = VoidType;
 
-  explicit VoidType() = default;
+    explicit VoidType() = default;
 };

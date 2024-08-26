@@ -11,22 +11,21 @@
 namespace co_io {
 
 class HttpConnection {
-public:
-  HttpConnection(AsyncFile conn, HttpRouter &router)
-      : conn_(std::move(conn)), buffer_(1024), router_(router),
-        parser_(std::bind(&HttpConnection::handle_request, this,
-                          std::placeholders::_1)) {}
+  public:
+    HttpConnection(AsyncFile conn, HttpRouter &router)
+        : conn_(std::move(conn)), buffer_(1024), router_(router),
+          parser_(std::bind(&HttpConnection::handle_request, this, std::placeholders::_1)) {}
 
-  Task<void> handle();
+    Task<void> handle();
 
-private:
-  AsyncFile conn_;
-  ByteBuffer buffer_;
-  HttpRouter &router_;
-  HttpPraser parser_;
-  bool stop = {false};
+  private:
+    AsyncFile conn_;
+    ByteBuffer buffer_;
+    HttpRouter &router_;
+    HttpPraser parser_;
+    bool stop = {false};
 
-  Task<void> handle_request(HttpRequest req);
+    Task<void> handle_request(HttpRequest req);
 };
 
 } // namespace co_io

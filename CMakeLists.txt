@@ -19,6 +19,9 @@ project(co_io LANGUAGES CXX)
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 file(GLOB_RECURSE HEADERS "src/*.hpp")
+file(GLOB_RECURSE TESTS "tests/*.cpp")
+file(GLOB_RECURSE EXAMPLES "examples/*.cpp")
+file(GLOB_RECURSE BENCH "bench/*.cpp")
 add_library(co_io STATIC ${SOURCES})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -61,3 +64,12 @@ add_exec(tests timers_auto_cancel)
 add_exec(tests test_when_any)
 add_exec(tests test_when_all)
 add_exec(tests test_run_task)
+
+
+add_custom_target(format
+      COMMAND clang-format -i ${SOURCES}
+      COMMAND clang-format -i ${HEADERS}
+      COMMAND clang-format -i ${TESTS}
+      COMMAND clang-format -i ${EXAMPLES}
+      COMMAND clang-format -i ${BENCH}
+)
