@@ -15,4 +15,6 @@ concept Awaiter = requires(A a, std::coroutine_handle<> h) {
 template <class A>
 concept Awaitable = Awaiter<A> || requires(A a) {
   { a.operator co_await() } -> Awaiter;
+} || requires(A a) {
+  { operator co_await(a) } -> Awaiter;
 };
