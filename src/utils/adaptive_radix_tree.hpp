@@ -19,6 +19,14 @@ template <typename Value> class AdaptiveRadixTree {
     struct Node256;
 
   public:
+    AdaptiveRadixTree() = default;
+    AdaptiveRadixTree(const AdaptiveRadixTree &other) = delete;
+    AdaptiveRadixTree &operator=(const AdaptiveRadixTree &other) = delete;
+
+    AdaptiveRadixTree(const AdaptiveRadixTree &&other) = default;
+    AdaptiveRadixTree &operator=(AdaptiveRadixTree &&other) = default;
+    ~AdaptiveRadixTree() { delete root; }
+
     void insert(std::string_view key, Value value);
     std::optional<Value> search(std::string_view key);
     void debug();
@@ -26,8 +34,6 @@ template <typename Value> class AdaptiveRadixTree {
     class Iterator;
     Iterator begin();
     Iterator end();
-
-    ~AdaptiveRadixTree() { delete root; }
 
     class Iterator {
       public:
@@ -433,7 +439,7 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node48 : public Node 
 
     Node *grow() override {
         // std::cerr << "grow 48 -> 256\n";
-        Node256 *node = new Node256{};
+        auto *node = new Node256{};
         for (uint16_t i = 0; i < 256; i++) {
             if (key[i] != N) {
                 node->childs[i] = childs[key[i]];
