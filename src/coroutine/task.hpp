@@ -175,7 +175,7 @@ template <typename T> Task<void, AutoDestoryPromise> auto_destory(Task<T> task) 
     (void)co_await task;
 }
 
-template <typename T> auto run_task(Task<T> task) {
+template <typename T, typename P = Promise<T>> auto run_task(Task<T, P> task) {
     auto wrapper = auto_destory(std::move(task));
     auto handle = wrapper.release();
     handle.resume();
