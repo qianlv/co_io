@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -12,7 +14,6 @@
 template <typename Value> class AdaptiveRadixTree {
     struct Node;
     struct Leaf;
-
     struct Node4;
     struct Node16;
     struct Node48;
@@ -29,8 +30,9 @@ template <typename Value> class AdaptiveRadixTree {
 
     void insert(std::string_view key, Value value);
     std::optional<Value> search(std::string_view key);
+    bool remove(std::string_view key);
+
     void debug();
-    // void erase();
     class Iterator;
     Iterator begin();
     Iterator end();
@@ -45,11 +47,11 @@ template <typename Value> class AdaptiveRadixTree {
 
         Iterator() = default;
         explicit Iterator(Node *node) {
-            stack.push({node->prefix, node});
+            stack.push({node->prefix_, node});
             if (!next_leaf(0)) { // empty tree
                 stack = std::stack<std::pair<std::string, Node *>>();
             } else {
-                value.reset(new value_type(stack.top().first, stack.top().second->leaf->value));
+                value.reset(new value_type(stack.top().first, stack.top().second->leaf_->value));
             }
         }
 
@@ -82,16 +84,16 @@ template <typename Value> class AdaptiveRadixTree {
             assert(stack.size() > 0);
             uint16_t start_key = 0;
             while (!stack.empty() && !next_leaf(start_key)) { // not new leaf, pop top
-                if (!stack.top().second->prefix.empty()) {    // non root node, only root
+                if (!stack.top().second->prefix_.empty()) {   // non root node, only root
                                                               // node prefix is empty
                     uint16_t next_key =
-                        static_cast<uint16_t>(stack.top().second->prefix.front()) + 1;
+                        static_cast<uint16_t>(stack.top().second->prefix_.front()) + 1;
                     start_key = next_key;
                 }
                 stack.pop();
             }
             if (!stack.empty()) {
-                value.reset(new value_type(stack.top().first, stack.top().second->leaf->value));
+                value.reset(new value_type(stack.top().first, stack.top().second->leaf_->value));
             }
             return *this;
         }
@@ -110,18 +112,15 @@ template <typename Value> class AdaptiveRadixTree {
             bool new_leaf = false;
             do {
                 auto &[prefix, current] = stack.top();
-                uint16_t next_key = 256;
-                if (current->nchilds > 0 &&
-                    (next_key = current->lower_bound_key(start_key)) != 256) {
-                    Node **next = current->get_node(next_key);
-                    assert(next != nullptr);
-                    stack.push({prefix + (*next)->prefix, *next});
+                if (auto result = current->next_or_equal_key(start_key); result) {
+                    auto *next = result->first;
+                    stack.push({prefix + next->prefix_, next});
                     start_key = 0;
                     new_leaf = true;
                 } else {
                     break;
                 }
-            } while (stack.top().second->leaf == nullptr);
+            } while (stack.top().second->leaf_ == nullptr);
             return new_leaf;
         }
         std::unique_ptr<value_type> value;
@@ -129,418 +128,617 @@ template <typename Value> class AdaptiveRadixTree {
     };
 
   private:
-    Node *root = new Node4{};
+    Node *root = new Node4{""};
 };
-
-template <typename Value> struct AdaptiveRadixTree<Value>::Leaf {
-    Value value;
-
-    Leaf(Value v) : value(std::move(v)) {}
-};
-
 template <typename Value> struct AdaptiveRadixTree<Value>::Node {
-    std::string prefix = "";
-    uint8_t nchilds = {0};
-    Leaf *leaf = {nullptr};
+    static constexpr size_t MaxChilds = 256;
+    std::string prefix_;
+    size_t size_ = 0;
+    Leaf *leaf_{};
 
-    size_t match(std::string_view match_prefix) const {
-        // std::cerr << "prefix = " << this->prefix << " match = " << match_prefix
-        // << std::endl;
+    explicit Node(std::string_view prefix) : prefix_(prefix) {}
+    Node(Node &&node) noexcept
+        : prefix_(std::move(node.prefix_)), size_(node.size_), leaf_(node.leaf_) {
+        node.size_ = 0;
+        node.prefix_.clear();
+        node.leaf_ = nullptr;
+    }
+    Node &operator=(Node &&node) noexcept {
+        std::swap(prefix_, node.prefix_);
+        std::swap(leaf_, node.leaf_);
+        std::swap(size_, node.size_);
+        return *this;
+    }
+
+    [[nodiscard]] size_t match(std::string_view match_prefix) const {
+        // std::cerr << "prefix = " << this->prefix_ << " match = " << match_prefix << std::endl;
         size_t i = 0;
-        for (i = 0; i < match_prefix.size() && i < this->prefix.size(); i++) {
-            if (this->prefix[i] != match_prefix[i]) {
+        for (i = 0; i < match_prefix.size() && i < this->prefix_.size(); i++) {
+            if (this->prefix_[i] != match_prefix[i]) {
                 break;
             }
         }
         return i;
     }
 
-    Node() = default;
-    Node(std::string_view prefix) : prefix(prefix) {}
-    Node(const Node &) = default;
-    virtual ~Node() {
-        if (leaf) {
-            delete leaf;
-        }
-    }
-
-    void copy(Node *node) {
-        this->prefix = std::move(node->prefix);
-        this->nchilds = node->nchilds;
-        this->leaf = node->leaf;
-        node->leaf = nullptr;
-    }
-
     void debug(size_t width) {
-        std::string s = std::string(width, ' ');
-        s.append(this->prefix);
-        s.append(leaf ? "(l)" : "(n)");
-        std::cerr << s << std::endl;
-        for (unsigned i = 0; i < 256; ++i) {
-            Node **node = get_node(static_cast<uint8_t>(i));
-            if (node) {
-                (*node)->debug(s.length());
-            }
+        std::string str = std::string(width, ' ');
+        str.append(this->prefix_);
+        str.append(leaf_ ? "(l)" : "(n)");
+        std::cerr << str << std::endl;
+        auto current = first_key();
+        while (current) {
+            current->first->debug(str.length());
+            current = next_or_equal_key(current->second + 1);
         }
     }
 
-    virtual void add_node(uint8_t k, Node *node) = 0;
-    virtual void del_node(uint8_t k) = 0;
-    virtual Node **get_node(uint8_t k) = 0;
-    virtual void clear_childs() = 0;
+    Node() = default;
+    Node(const Node &) = delete;
+    Node &operator=(const Node &) = delete;
+    virtual ~Node() { delete leaf_; }
+
+    [[nodiscard]] virtual size_t size() const noexcept { return size_; }
+    [[nodiscard]] virtual bool is_full() const noexcept = 0;
+    virtual bool insert(uint8_t key, Node *node) = 0;
+    virtual Node **find(uint8_t key) = 0;
+    virtual void remove(uint8_t key) = 0;
+    virtual std::optional<std::pair<Node *, uint8_t>>
+    next_or_equal_key(size_t key) const noexcept = 0;
+    virtual std::optional<std::pair<Node *, uint8_t>>
+    prev_or_equal_key(size_t key) const noexcept = 0;
+    virtual std::optional<std::pair<Node *, uint8_t>> first_key() const noexcept = 0;
+    virtual std::optional<std::pair<Node *, uint8_t>> last_key() const noexcept = 0;
+    virtual Node *move() = 0;
     virtual Node *grow() = 0;
     virtual Node *shrink() = 0;
-    virtual bool is_full() = 0;
-    virtual Node *clone() = 0;
-    virtual uint16_t lower_bound_key(uint16_t k) = 0;
+};
+
+template <typename Value> struct AdaptiveRadixTree<Value>::Leaf {
+    Value value;
+
+    explicit Leaf(Value val) : value(std::move(val)) {}
 };
 
 template <typename Value> struct AdaptiveRadixTree<Value>::Node4 : public Node {
-    static constexpr uint8_t N = 4;
+    friend struct Node16;
 
-    uint8_t key[N];
-    Node *childs[N];
+    constexpr static size_t SIZE = 4;
+    std::array<uint8_t, SIZE> keys_{};
+    std::array<Node *, SIZE> childs_{};
 
-    Node4() { clear_childs(); }
-
-    Node4(std::string_view prefix) : Node{prefix} { clear_childs(); }
-
-    Node4(const Node4 &node) : Node(node) {
-        std::copy(node.key, node.key + N, key);
-        std::copy(node.childs, node.childs + N, childs);
+    Node4(const Node4 &) = delete;
+    Node4 &operator=(const Node4 &) = delete;
+    explicit Node4(std::string_view prefix) : Node(prefix) {}
+    Node4(Node4 &&node) noexcept
+        : Node(std::move(node)), keys_(std::move(node.keys_)), childs_(std::move(node.childs_)) {
+        node.childs_.fill(nullptr);
     }
-
-    void clear_childs() override {
-        std::fill(key, key + N, 0);
-        std::fill(childs, childs + N, nullptr);
-        Node::nchilds = 0;
+    Node4 &operator=(Node4 &&node) noexcept {
+        std::swap(Node::prefix_, node.prefix_);
+        std::swap(Node::leaf_, node.leaf_);
+        std::swap(Node::size_, node.size_);
+        std::swap(keys_, node.keys_);
+        std::swap(childs_, node.childs_);
+        return *this;
     }
-
-    uint16_t lower_bound_key(uint16_t k) override {
-        uint8_t index = 0;
-        while (index < Node::nchilds && key[index] < k) {
-            index++;
-        }
-        if (index < Node::nchilds) {
-            return key[index];
-        } else {
-            return 256;
-        }
-    }
-
-    void add_node(uint8_t k, Node *node) override {
-        assert(Node::nchilds < N);
-        uint8_t index = 0;
-        while (index < Node::nchilds && key[index] < k) {
-            index += 1;
-        }
-        for (uint8_t i = Node::nchilds; i > index; i--) {
-            key[i] = key[i - 1];
-            childs[i] = childs[i - 1];
-        }
-        key[index] = k;
-        childs[index] = node;
-        Node::nchilds++;
-    }
-
-    void del_node(uint8_t k) override {
-        for (uint8_t i = 0; i < N; i++) {
-            if (childs[i] && key[i] == k) {
-                childs[i] = nullptr;
-                Node::nchilds--;
-            }
-        }
-    }
-
-    Node **get_node(uint8_t k) override {
-        for (uint8_t i = 0; i < N; i++) {
-            if (childs[i] && key[i] == k) {
-                return &childs[i];
-            }
-        }
-        return nullptr;
-    }
-
-    Node *grow() override {
-        // std::cerr << "grow 4 -> 16\n";
-        Node16 *node = new Node16{};
-        std::copy(key, key + N, node->key);
-        std::copy(childs, childs + N, node->childs);
-        node->copy(this);
-        clear_childs();
-        return node;
-    }
-    Node *shrink() override { return nullptr; }
-    bool is_full() override { return Node::nchilds == N; }
-
-    Node *clone() override { return new Node4(*this); }
+    explicit Node4(Node16 &&node);
 
     ~Node4() override {
-        for (uint8_t i = 0; i < N; i++) {
-            if (childs[i]) {
-                delete childs[i];
-            }
+        for (uint8_t i = 0; i < Node::Node::size(); i++) {
+            delete childs_[i];
         }
     }
+
+    [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    bool insert(uint8_t key, Node *node) override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::Node::size(), key) -
+            keys_.begin());
+        if (index == Node::Node::size() || keys_[index] != key) {
+            for (size_t i = Node::Node::size(); i > index; i--) {
+                keys_[i] = keys_[i - 1];
+                childs_[i] = childs_[i - 1];
+            }
+            keys_[index] = static_cast<uint8_t>(key);
+            childs_[index] = node;
+            Node::size_ += 1;
+            return true;
+        }
+        return false;
+    }
+
+    void remove(uint8_t key) override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::Node::size(), key) -
+            keys_.begin());
+        if (index == Node::Node::size() || keys_[index] != key) {
+            return;
+        }
+        for (size_t i = index; i < Node::Node::size() - 1; i++) {
+            keys_[i] = keys_[i + 1];
+            childs_[i] = childs_[i + 1];
+        }
+        Node::size_ -= 1;
+    }
+
+    Node **find(uint8_t key) override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index == Node::size() || keys_[index] != key) {
+            return nullptr;
+        }
+        return &childs_[index];
+    }
+
+    std::optional<std::pair<Node *, uint8_t>>
+    prev_or_equal_key(size_t key) const noexcept override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index != Node::size() && keys_[index] == key) {
+            return std::make_optional(std::make_pair(childs_[index], key));
+        }
+
+        if (index == 0) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[index - 1], keys_[index - 1]));
+    }
+
+    std::optional<std::pair<Node *, uint8_t>>
+    next_or_equal_key(size_t key) const noexcept override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index == Node::size()) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[index], keys_[index]));
+    }
+
+    std::optional<std::pair<Node *, uint8_t>> first_key() const noexcept override {
+        if (Node::size() == 0) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[0], keys_[0]));
+    }
+    std::optional<std::pair<Node *, uint8_t>> last_key() const noexcept override {
+        if (Node::size() == 0) {
+            return std::nullopt;
+        }
+        return std::make_optional(
+            std::make_pair(childs_[Node::size() - 1], keys_[Node::size() - 1]));
+    }
+
+    Node *move() override { return new Node4(std::move(*this)); }
+    Node *shrink() override;
+    Node *grow() override;
 };
 
 template <typename Value> struct AdaptiveRadixTree<Value>::Node16 : public Node {
-    static constexpr uint8_t N = 16;
+    friend struct Node4;
+    friend struct Node48;
 
-    uint8_t key[N];
-    Node *childs[N];
+    constexpr static size_t SIZE = 16;
+    std::array<uint8_t, SIZE> keys_{};
+    std::array<Node *, SIZE> childs_{};
 
-    Node16() { clear_childs(); }
-    Node16(std::string_view prefix) : Node{prefix} { clear_childs(); }
-    Node16(const Node16 &node) : Node(node) {
-        std::copy(node.key, node.key + N, key);
-        std::copy(node.childs, node.childs + N, childs);
+    Node16(const Node16 &) = delete;
+    Node16 &operator=(const Node16 &) = delete;
+    explicit Node16(std::string_view prefix) : Node(prefix) {}
+    Node16(Node16 &&node) noexcept
+        : Node(std::move(node)), keys_(std::move(node.keys_)), childs_(std::move(node.childs_)) {
+        node.childs_.fill(nullptr);
     }
-
-    void clear_childs() override {
-        std::fill(key, key + N, 0);
-        std::fill(childs, childs + N, nullptr);
-        Node::nchilds = 0;
+    Node16 &operator=(Node16 &&node) noexcept {
+        std::swap(Node::prefix_, node.prefix_);
+        std::swap(Node::leaf_, node.leaf_);
+        std::swap(Node::size_, node.size_);
+        std::swap(keys_, node.keys_);
+        std::swap(childs_, node.childs_);
+        return *this;
     }
-
-    uint16_t lower_bound_key(uint16_t k) override {
-        uint8_t index = 0;
-        while (index < Node::nchilds && key[index] < k) {
-            // std::cerr << "k = " << k << " key[" << index << "] = " <<
-            // static_cast<char>(key[index]) << std::endl;
-            index++;
-        }
-        if (index < Node::nchilds) {
-            return key[index];
-        } else {
-            return 256;
-        }
-    }
-
-    void add_node(uint8_t k, Node *node) override {
-        uint8_t index = 0;
-        while (index < Node::nchilds && key[index] < k) {
-            index += 1;
-        }
-        for (uint8_t i = Node::nchilds; i > index; i--) {
-            key[i] = key[i - 1];
-            childs[i] = childs[i - 1];
-        }
-        key[index] = k;
-        childs[index] = node;
-        Node::nchilds++;
-    }
-
-    void del_node(uint8_t k) override {
-        for (uint8_t i = 0; i < N; i++) {
-            if (childs[i] && key[i] == k) {
-                childs[i] = nullptr;
-                Node::nchilds--;
-            }
-        }
-    }
-
-    Node **get_node(uint8_t k) override {
-        for (uint8_t i = 0; i < N; i++) {
-            if (childs[i] && key[i] == k) {
-                return &childs[i];
-            }
-        }
-        return nullptr;
-    }
-
-    Node *grow() override {
-        // std::cerr << "grow 16 -> 48\n";
-        Node48 *node = new Node48{};
-        for (uint8_t i = 0; i < N; i++) {
-            node->key[key[i]] = i;
-            node->childs[i] = childs[i];
-            childs[i] = nullptr;
-        }
-        node->copy(this);
-        return node;
-    }
-
-    Node *shrink() override {
-        assert(Node::nchilds <= Node4::N);
-        Node4 *node = new Node4{};
-        std::copy(key, key + Node4::N, node->key);
-        std::copy(childs, childs + Node4::N, node->childs);
-        node->copy(this);
-        return node;
-    }
-    bool is_full() override { return Node::nchilds == N; }
-    Node *clone() override { return new Node16(*this); }
-
+    explicit Node16(Node4 &&node);
+    explicit Node16(Node48 &&node);
     ~Node16() override {
-        for (uint8_t i = 0; i < N; i++) {
-            if (childs[i]) {
-                delete childs[i];
-            }
+        for (uint8_t i = 0; i < Node::size(); i++) {
+            delete childs_[i];
         }
     }
+
+    [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    bool insert(uint8_t key, Node *node) override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index == Node::size() || keys_[index] != key) {
+            for (size_t i = Node::size(); i > index; i--) {
+                keys_[i] = keys_[i - 1];
+                childs_[i] = childs_[i - 1];
+            }
+            keys_[index] = static_cast<uint8_t>(key);
+            childs_[index] = node;
+            Node::size_ += 1;
+            return true;
+        }
+        return false;
+    }
+
+    void remove(uint8_t key) override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index == Node::size() || keys_[index] != key) {
+            return;
+        }
+        for (size_t i = index; i < Node::size() - 1; i++) {
+            keys_[i] = keys_[i + 1];
+            childs_[i] = childs_[i + 1];
+        }
+        Node::size_ -= 1;
+    }
+
+    Node **find(uint8_t key) override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index == Node::size() || keys_[index] != key) {
+            return nullptr;
+        }
+        return &childs_[index];
+    }
+
+    std::optional<std::pair<Node *, uint8_t>>
+    prev_or_equal_key(size_t key) const noexcept override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index != Node::size() && keys_[index] == key) {
+            return std::make_optional(std::make_pair(childs_[index], key));
+        }
+
+        if (index == 0) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[index - 1], keys_[index - 1]));
+    }
+
+    std::optional<std::pair<Node *, uint8_t>>
+    next_or_equal_key(size_t key) const noexcept override {
+        auto index = static_cast<size_t>(
+            std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
+        if (index == Node::size()) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[index], keys_[index]));
+    }
+
+    std::optional<std::pair<Node *, uint8_t>> first_key() const noexcept override {
+        if (Node::size() == 0) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[0], keys_[0]));
+    }
+    std::optional<std::pair<Node *, uint8_t>> last_key() const noexcept override {
+        if (Node::size() == 0) {
+            return std::nullopt;
+        }
+        return std::make_optional(
+            std::make_pair(childs_[Node::size() - 1], keys_[Node::size() - 1]));
+    }
+
+    Node *move() override { return new Node16(std::move(*this)); }
+    Node *shrink() override;
+    Node *grow() override;
 };
 
 template <typename Value> struct AdaptiveRadixTree<Value>::Node48 : public Node {
-    uint8_t key[256];
-    Node *childs[48];
+    friend struct Node16;
+    friend struct Node256;
+    static constexpr int SIZE = 48;
+    std::array<uint8_t, Node::MaxChilds> keys_{};
+    std::array<Node *, SIZE> childs_{};
 
-    static constexpr uint8_t N = 48;
-
-    Node48() { clear_childs(); }
-    Node48(std::string_view prefix) : Node{prefix} { clear_childs(); }
-    Node48(const Node48 &node) : Node(node) {
-        std::copy(node.key, node.key + 256, key);
-        std::copy(node.childs, node.childs + N, childs);
+    Node48(const Node48 &) = delete;
+    Node48 &operator=(const Node48 &) = delete;
+    explicit Node48(std::string_view prefix) : Node(prefix) { keys_.fill(SIZE); }
+    Node48(Node48 &&node) noexcept
+        : Node(std::move(node)), keys_(std::move(node.keys_)), childs_(std::move(node.childs_)) {
+        node.keys_.fill(SIZE);
+        node.childs_.fill(nullptr);
     }
-
-    void clear_childs() override {
-        std::fill(key, key + 256, N);
-        std::fill(childs, childs + N, nullptr);
-        Node::nchilds = 0;
+    Node48 &operator=(Node48 &&node) noexcept {
+        std::swap(Node::prefix_, node.prefix_);
+        std::swap(Node::leaf_, node.leaf_);
+        std::swap(Node::size_, node.size_);
+        std::swap(keys_, node.keys_);
+        std::swap(childs_, node.childs_);
+        return *this;
     }
-
-    uint16_t lower_bound_key(uint16_t k) override {
-        uint16_t nk = k;
-        while (nk < 256 && key[nk] == N) {
-            nk += 1;
-        }
-        return nk;
-    }
-
-    void add_node(uint8_t k, Node *node) override {
-        assert(Node::nchilds < N);
-        if (key[k] == N) {
-            for (uint8_t i = 0; i < N; i++) {
-                if (!childs[i]) {
-                    key[k] = i;
-                    childs[i] = node;
-                    Node::nchilds++;
-                    return;
-                }
-            }
+    explicit Node48(Node16 &&node);
+    explicit Node48(Node256 &&node);
+    ~Node48() {
+        for (uint8_t i = 0; i < Node::size(); i++) {
+            delete childs_[i];
         }
     }
 
-    void del_node(uint8_t k) override {
-        if (key[k] != N) {
-            childs[key[k]] = nullptr;
-            key[k] = N;
-            Node::nchilds--;
+    [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    bool insert(uint8_t key, Node *node) override {
+        uint8_t index = keys_[key];
+        if (index != SIZE) {
+            return false;
+        }
+
+        for (index = 0; index < SIZE && childs_[index]; ++index) {
+            ;
+        }
+        Node::size_ += 1;
+        keys_[key] = index;
+        childs_[index] = node;
+        return true;
+    }
+
+    void remove(uint8_t key) override {
+        if (uint8_t index = keys_[key]; index != SIZE) {
+            keys_[key] = SIZE;
+            childs_[index] = nullptr;
+            Node::size_ -= 1;
         }
     }
 
-    Node **get_node(uint8_t k) override {
-        if (key[k] != N) {
-            return &childs[key[k]];
+    Node **find(uint8_t key) override {
+        if (uint8_t index = keys_[key]; index != SIZE) {
+            return &childs_[index];
         }
         return nullptr;
     }
 
-    Node *grow() override {
-        // std::cerr << "grow 48 -> 256\n";
-        auto *node = new Node256{};
-        for (uint16_t i = 0; i < 256; i++) {
-            if (key[i] != N) {
-                node->childs[i] = childs[key[i]];
-                childs[key[i]] = nullptr;
-            }
+    std::optional<std::pair<Node *, uint8_t>>
+    next_or_equal_key(size_t key) const noexcept override {
+        while (key < Node::MaxChilds && keys_[key] == SIZE) {
+            key += 1;
         }
-        node->copy(this);
-        return node;
+        if (key == Node::MaxChilds) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[keys_[key]], static_cast<uint8_t>(key)));
     }
 
-    Node *shrink() override {
-        assert(Node::nchilds <= Node16::N);
-        Node16 *node = new Node16{};
-        uint8_t j = 0;
-        for (uint16_t i = 0; i < 256; ++i) {
-            if (key[i] != N) {
-                node->key[j] = key[i];
-                node->childs[j] = childs[key[i]];
-                j++;
-            }
+    std::optional<std::pair<Node *, uint8_t>>
+    prev_or_equal_key(size_t key) const noexcept override {
+        while (key > 0 && keys_[key] == SIZE) {
+            key -= 1;
         }
-        node->copy(this);
-        return node;
+        if (key == 0 && keys_[key] == SIZE) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[keys_[key]], static_cast<uint8_t>(key)));
     }
-    bool is_full() override { return Node::nchilds == N; }
-    Node *clone() override { return new Node48(*this); }
 
-    ~Node48() override {
-        for (uint8_t i = 0; i < N; i++) {
-            if (childs[i]) {
-                delete childs[i];
-            }
-        }
+    std::optional<std::pair<Node *, uint8_t>> first_key() const noexcept override {
+        return next_or_equal_key(0);
     }
+
+    std::optional<std::pair<Node *, uint8_t>> last_key() const noexcept override {
+        return prev_or_equal_key(Node::MaxChilds - 1);
+    }
+
+    Node *move() override { return new Node48(std::move(*this)); }
+    Node *shrink() override;
+    Node *grow() override;
 };
 
 template <typename Value> struct AdaptiveRadixTree<Value>::Node256 : public Node {
-    static constexpr uint16_t N = 256;
-    Node *childs[N];
+    friend struct Node48;
+    static constexpr int SIZE = 256;
+    std::array<Node *, SIZE> childs_{};
+    uint8_t size_{};
 
-    Node256() { clear_childs(); }
-    Node256(std::string_view prefix) : Node{prefix} { clear_childs(); }
-    Node256(const Node256 &node) : Node(node) { std::copy(node.childs, node.childs + N, childs); }
-
-    void clear_childs() override {
-        std::fill(childs, childs + N, nullptr);
-        Node::nchilds = 0;
+    Node256(const Node256 &) = delete;
+    Node256 &operator=(const Node256 &) = delete;
+    explicit Node256(std::string_view prefix) : Node(prefix) {}
+    Node256(Node256 &&node) noexcept : Node(std::move(node)), childs_(std::move(node.childs_)) {
+        node.childs_.fill(nullptr);
     }
-
-    uint16_t lower_bound_key(uint16_t k) override {
-        uint16_t nk = k;
-        while (nk < 256 && childs[nk] == nullptr) {
-            nk += 1;
-        }
-        return nk;
+    Node256 &operator=(Node256 &&node) noexcept {
+        std::swap(Node::prefix_, node.prefix_);
+        std::swap(Node::leaf_, node.leaf_);
+        std::swap(childs_, node.childs_);
+        std::swap(size_, node.size_);
+        return *this;
     }
-
-    void add_node(uint8_t k, Node *node) override {
-        assert(Node::nchilds < N);
-        if (childs[k] == nullptr) {
-            childs[k] = node;
-            Node::nchilds++;
+    explicit Node256(Node48 &&node);
+    ~Node256() {
+        for (size_t i = 0; i < SIZE; i++) {
+            delete childs_[i];
         }
     }
 
-    void del_node(uint8_t k) override {
-        if (childs[k] != nullptr) {
-            childs[k] = nullptr;
-            Node::nchilds--;
+    [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    bool insert(uint8_t key, Node *node) override {
+        if (childs_[key] == nullptr) {
+            childs_[key] = node;
+            Node::size_ += 1;
+            return true;
+        }
+        return false;
+    }
+
+    void remove(uint8_t key) override {
+        if (childs_[key] != nullptr) {
+            childs_[key] = nullptr;
+            Node::size_ -= 1;
         }
     }
 
-    Node **get_node(uint8_t k) override { return childs[k] != nullptr ? &childs[k] : nullptr; }
-
-    Node *grow() override { return nullptr; }
-
-    Node *shrink() override {
-        assert(Node::nchilds <= Node48::N);
-        Node48 *node = new Node48{};
-        uint8_t j = 0;
-        for (uint16_t i = 0; i < N; ++i) {
-            if (childs[i] != nullptr) {
-                node->key[i] = j;
-                node->childs[j] = childs[i];
-                j++;
-            }
+    Node **find(uint8_t key) override {
+        if (childs_[key] == nullptr) {
+            return nullptr;
         }
-        node->copy(this);
-        return node;
+        return &childs_[key];
     }
-    bool is_full() override { return Node::nchilds == N; }
-    Node *clone() override { return new Node256(*this); }
 
-    ~Node256() override {
-        for (uint16_t i = 0; i < N; i++) {
-            if (childs[i]) {
-                delete childs[i];
-            }
+    std::optional<std::pair<Node *, uint8_t>>
+    next_or_equal_key(size_t key) const noexcept override {
+        while (key < Node::MaxChilds && childs_[key] == nullptr) {
+            key += 1;
         }
+        if (key == Node::MaxChilds) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[key], static_cast<uint8_t>(key)));
     }
+
+    std::optional<std::pair<Node *, uint8_t>>
+    prev_or_equal_key(size_t key) const noexcept override {
+        while (key > 0 && childs_[key] == nullptr) {
+            key -= 1;
+        }
+        if (key == 0 && childs_[key] == nullptr) {
+            return std::nullopt;
+        }
+        return std::make_optional(std::make_pair(childs_[key], static_cast<uint8_t>(key)));
+    }
+
+    std::optional<std::pair<Node *, uint8_t>> first_key() const noexcept override {
+        return next_or_equal_key(0);
+    }
+
+    std::optional<std::pair<Node *, uint8_t>> last_key() const noexcept override {
+        return prev_or_equal_key(Node::MaxChilds - 1);
+    }
+
+    Node *move() override { return new Node256(std::move(*this)); }
+    Node *shrink() override;
+    Node *grow() override;
 };
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node4::Node4(Node16 &&node) : Node4("") { // 16 -> 4
+    assert(node.size_ <= SIZE);
+    Node::prefix_ = std::move(node.prefix_);
+    std::copy_n(node.keys_.begin(), std::min(SIZE, node.size()), keys_.begin());
+    std::copy_n(node.childs_.begin(), std::min(SIZE, node.size()), childs_.begin());
+    Node::size_ = node.size_;
+    Node::leaf_ = std::move(node.leaf_);
+    node.childs_.fill(nullptr);
+    node.leaf_ = nullptr;
+    node.size_ = 0;
+}
+
+template <typename Value> AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node4::grow() {
+    return new Node16(std::move(*this));
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node4::shrink() {
+    assert(false);
+    return nullptr;
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node16::Node16(Node4 &&node) : Node16("") { // 4 -> 16
+    Node::prefix_ = std::move(node.prefix_);
+    std::copy_n(node.keys_.begin(), std::min(SIZE, node.size()), keys_.begin());
+    std::copy_n(node.childs_.begin(), std::min(SIZE, node.size()), childs_.begin());
+    Node::size_ = node.size_;
+    Node::leaf_ = std::move(node.leaf_);
+    node.childs_.fill(nullptr);
+    node.leaf_ = nullptr;
+    node.size_ = 0;
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node16::Node16(Node48 &&node) : Node16("") { // 48 -> 16
+    assert(node.size_ <= SIZE);
+    Node::prefix_ = std::move(node.prefix_);
+    size_t index = 0;
+    for (size_t i = 0; i < Node::MaxChilds; i++) {
+        Node **child = node.find(i);
+        if (child) {
+            keys_[index] = static_cast<uint8_t>(i);
+            childs_[index] = *child;
+        }
+    }
+    Node::size_ = node.size_;
+    Node::leaf_ = std::move(node.leaf_);
+    node.childs_.fill(nullptr);
+    node.leaf_ = nullptr;
+    node.Node::size_ = 0;
+}
+
+template <typename Value> AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node16::grow() {
+    return new Node48(std::move(*this));
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node16::shrink() {
+    return new Node4(std::move(*this));
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node48::Node48(Node16 &&node) : Node48("") { // 16 -> 48
+    Node::prefix_ = std::move(node.prefix_);
+    for (size_t i = 0; i < node.size(); ++i) {
+        keys_[node.keys_[i]] = static_cast<uint8_t>(i);
+        childs_[i] = node.childs_[i];
+    }
+    Node::size_ = node.size_;
+    Node::leaf_ = std::move(node.leaf_);
+    node.childs_.fill(nullptr);
+    node.leaf_ = nullptr;
+    node.size_ = 0;
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node48::Node48(Node256 &&node) : Node48("") { // 256 -> 48
+    assert(node.size_ <= SIZE);
+    Node::prefix_ = std::move(node.prefix_);
+    uint8_t index = 0;
+    for (size_t key = 0; key < Node::MaxChilds; ++key) {
+        if (childs_[key]) {
+            keys_[key] = index;
+            childs_[index] = childs_[key];
+            index += 1;
+        }
+    }
+    Node::size_ = node.size_;
+    Node::leaf_ = std::move(node.leaf_);
+    node.childs_.fill(nullptr);
+    node.leaf_ = nullptr;
+    node.size_ = 0;
+}
+
+template <typename Value> AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node48::grow() {
+    return new Node256(std::move(*this));
+}
+template <typename Value>
+AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node48::shrink() {
+    return new Node16(std::move(*this));
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node256::Node256(Node48 &&node) : Node256("") { // 48 -> 256
+    Node::prefix_ = std::move(node.prefix_);
+    for (size_t key = 0; key < Node::MaxChilds; ++key) {
+        Node **child = node.find(key);
+        if (child) {
+            childs_[key] = *child;
+        }
+    }
+    Node::size_ = node.size_;
+    Node::leaf_ = std::move(node.leaf_);
+    node.childs_.fill(nullptr);
+    node.leaf_ = nullptr;
+    node.size_ = 0;
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node256::grow() {
+    assert(false);
+    return nullptr;
+}
+
+template <typename Value>
+AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node256::shrink() {
+    return new Node256(std::move(*this));
+}
 
 template <typename Value> void AdaptiveRadixTree<Value>::insert(std::string_view key, Value value) {
     Node *current = root;
@@ -548,48 +746,49 @@ template <typename Value> void AdaptiveRadixTree<Value>::insert(std::string_view
     while (!key.empty()) {
         size_t match_prefix = current->match(key);
         // std::cerr << "commmon_prefix = "
-        //           << std::string_view(key.data(), match_prefix)
-        //           << " current_remaing = "
-        //           << std::string_view(current->prefix.data() + match_prefix,
-        //                               current->prefix.length() - match_prefix)
-        //           << " key_remaing = "
-        //           << std::string_view(key.data() + match_prefix,
-        //                               key.length() - match_prefix)
-        //           << std::endl;
-        if (current->prefix.length() > match_prefix) { // split at current node
-            Node *new_node = current->clone();
-            new_node->prefix = current->prefix.substr(match_prefix);
+        //     << std::string_view(key.data(), match_prefix)
+        //     << " current_remaing = "
+        //     << std::string_view(current->prefix_.data() + match_prefix,
+        //                         current->prefix_.length() - match_prefix)
+        //     << " key_remaing = "
+        //     << std::string_view(key.data() + match_prefix,
+        //                         key.length() - match_prefix)
+        //     << std::endl;
+        if (current->prefix_.length() > match_prefix) { // split at current node
+            Node *new_node = current->move();
+            current->prefix_ = new_node->prefix_.substr(0, match_prefix);
+            new_node->prefix_ = new_node->prefix_.substr(match_prefix);
 
-            current->prefix = current->prefix.substr(0, match_prefix);
-            current->clear_childs();
-            current->add_node(new_node->prefix[0], new_node);
-            current->leaf = nullptr;
+            current->prefix_ = current->prefix_.substr(0, match_prefix);
+            current->insert(static_cast<uint8_t>(new_node->prefix_[0]), new_node);
             if (key.length() > match_prefix) {
-                current->add_node(key[match_prefix], new Node4{
-                                                         key.substr(match_prefix),
-                                                     });
+                current->insert(static_cast<uint8_t>(key[match_prefix]),
+                                new Node4{
+                                    key.substr(match_prefix),
+                                });
             }
         }
 
         key.remove_prefix(match_prefix);
-        if (!key.empty() && current->get_node(key[0]) == nullptr) {
+        if (!key.empty() && current->find(key[0]) == nullptr) {
             if (current->is_full()) {
                 *parent = current->grow();
                 delete current;
                 current = *parent;
             }
-            current->add_node(key[0], new Node4{key});
+            current->insert(key[0], new Node4{key});
         }
 
         if (!key.empty()) {
-            parent = current->get_node(key[0]);
+            parent = current->find(key[0]);
+            assert(parent != nullptr);
             current = *parent;
         }
     }
-    if (current->leaf) {
-        current->leaf->value = value;
+    if (current->leaf_) {
+        current->leaf_->value = value;
     } else {
-        current->leaf = new Leaf{value};
+        current->leaf_ = new Leaf{value};
     }
 }
 
@@ -607,23 +806,27 @@ std::optional<Value> AdaptiveRadixTree<Value>::search(std::string_view key) {
         //           << std::string_view(key.data() + match_prefix,
         //                               key.length() - match_prefix)
         //           << std::endl;
-        if (current->prefix.length() > match_prefix) { // prefix not complete match
+        if (current->prefix_.length() > match_prefix) { // prefix not complete match
             return {};
         }
         key.remove_prefix(match_prefix);
         if (key.empty()) { // prefix complete match and remaining key is empty
             break;
         }
-        Node **p = current->get_node(key[0]);
+        Node **p = current->find(key[0]);
         if (p == nullptr) { // remaing key not next node to match
             return {};
         }
         current = *p;
     }
-    if (current->leaf != nullptr) {
-        return {current->leaf->value};
+    if (current->leaf_ != nullptr) {
+        return {current->leaf_->value};
     }
     return {};
+}
+
+template <typename Value> bool AdaptiveRadixTree<Value>::remove(std::string_view key) {
+    return false;
 }
 
 template <typename Value> void AdaptiveRadixTree<Value>::debug() {

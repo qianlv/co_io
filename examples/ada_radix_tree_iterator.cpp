@@ -31,14 +31,8 @@ void test5() {
 }
 
 std::string randstring(std::mt19937 &rng) {
-    static constexpr std::string_view alphas = "abcdefghijklmnopqrstuvwxyz";
-    std::string s;
-    int n = std::uniform_int_distribution<int>(10, 20)(rng);
-    auto alphas_size = alphas.size();
-    for (int i = 0; i < n; i++) {
-        s += alphas[std::uniform_int_distribution<size_t>(0, alphas_size - 1)(rng)];
-    }
-    return s;
+    std::hash<uint64_t> hasher;
+    return std::to_string(hasher(rng()));
 }
 
 void test_random(size_t n) {
@@ -69,7 +63,7 @@ int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
     test5();
-    test_random(1000);
+    test_random(1000000);
     if (argc > 1) {
         test_file(argv[1]);
     }

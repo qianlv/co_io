@@ -1,6 +1,8 @@
 #include "utils/adaptive_radix_tree.hpp"
 #include <fstream>
 #include <random>
+#include <set>
+#include <unordered_map>
 #include <vector>
 
 void test1() {
@@ -51,20 +53,16 @@ void test5() {
     };
     AdaptiveRadixTree<int> tree;
     for (auto word : words) {
+        std::cerr << "word " << word << std::endl;
         tree.insert(word, 1);
+        tree.debug();
     }
     tree.debug();
 }
 
 std::string randstring(std::mt19937 &rng) {
-    static constexpr std::string_view alphas = "abcdefghijklmnopqrstuvwxyz";
-    std::string s;
-    int n = std::uniform_int_distribution<int>(10, 20)(rng);
-    auto alphas_size = alphas.size();
-    for (int i = 0; i < n; i++) {
-        s += alphas[std::uniform_int_distribution<size_t>(0, alphas_size - 1)(rng)];
-    }
-    return s;
+    std::hash<uint64_t> hasher;
+    return std::to_string(hasher(rng()));
 }
 
 void test_random(size_t n) {
@@ -80,29 +78,37 @@ void test_random(size_t n) {
     for (auto word : words) {
         tree.insert(word, 1);
     }
-    tree.debug();
+    for (auto word : words) {
+        if (!tree.search(word)) {
+            std::cerr << word << " -> "
+                      << "not found" << std::endl;
+            return;
+        }
+    }
+    // tree.debug();
 }
 
 void test_file(std::string filename) {
     std::ifstream fin(filename);
     std::string word;
-    std::vector<std::string> words;
+    std::unordered_map<std::string, size_t> words;
     AdaptiveRadixTree<size_t> tree;
     size_t i = 0;
     while (fin >> word) {
-        words.push_back(word);
+        words[word] = i;
         tree.insert(word, i);
         i += 1;
     }
-    for (i = 0; i < words.size(); i++) {
-        std::optional<size_t> result = tree.search(words[i]);
+
+    for (const auto& [word, i] : words) {
+        std::optional<size_t> result = tree.search(word);
         if (!result) {
-            std::cerr << words[i] << " -> "
+            std::cerr << word << " -> "
                       << "not found" << std::endl;
             return;
         }
         if (*result != i) {
-            std::cerr << words[i] << " -> " << *result << std::endl;
+            std::cerr << word << " -> " << *result  << " != " << i << std::endl;
             return;
         }
     }
@@ -127,7 +133,7 @@ int main(int argc, char *argv[]) {
     test3();
     test4();
     test5();
-    test_random(1000);
+    test_random(1000000);
     if (argc > 1) {
         test_file(argv[1]);
     }
