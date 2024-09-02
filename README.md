@@ -25,7 +25,6 @@ cmake --build build
 
 1. HTTPS
 2. Notification queue with Coroutine, Notification queue is suspend at the condition variable, it's conflict with Coroutine.
-3. Adaptive Radix Tree remove operation
 
 ## Usage samples
 
