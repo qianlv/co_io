@@ -56,15 +56,15 @@ add_exec(examples echo_server)
 add_exec(examples http_parser_test)
 add_exec(examples http)
 add_exec(examples http_mt)
-add_exec(examples ada_radix_tree_test)
-add_exec(examples ada_radix_tree_iterator)
 add_bench(bench query_sparse_uniform)
 add_exec(tests timers_sleep)
 add_exec(tests timers_auto_cancel)
 add_exec(tests test_when_any)
 add_exec(tests test_when_all)
 add_exec(tests test_run_task)
-
+add_exec(tests test_adative_radix_tree)
+add_exec(tests test_ada_radix_tree_insert)
+add_exec(tests test_ada_radix_tree_iterator)
 
 add_custom_target(format
       COMMAND clang-format -i ${SOURCES}

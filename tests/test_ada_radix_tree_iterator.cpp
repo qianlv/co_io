@@ -13,12 +13,15 @@ void test(std::set<std::string> words, std::string name) {
 
     auto iter = tree.begin();
     auto iter2 = words.begin();
+    size_t count = 0;
     for (; iter2 != words.end() && iter != tree.end(); ++iter2, ++iter) {
-        if (iter->first != *iter2) {
-            std::cerr << name << " Error: " << iter->first << " != " << *iter2 << std::endl;
+        if (iter->key != *iter2) {
+            std::cerr << name << " Error: " << iter->key << " != " << *iter2 << std::endl;
             return;
         }
+        count ++;
     }
+    std::cerr << name << " Count: " << count << std::endl;
 }
 
 void test5() {

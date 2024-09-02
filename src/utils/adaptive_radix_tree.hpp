@@ -13,13 +13,14 @@
 
 template <typename Value> class AdaptiveRadixTree {
     struct Node;
-    struct Leaf;
     struct Node4;
     struct Node16;
     struct Node48;
     struct Node256;
 
   public:
+    struct Leaf;
+
     AdaptiveRadixTree() = default;
     AdaptiveRadixTree(const AdaptiveRadixTree &other) = delete;
     AdaptiveRadixTree &operator=(const AdaptiveRadixTree &other) = delete;
@@ -41,38 +42,33 @@ template <typename Value> class AdaptiveRadixTree {
       public:
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
-        using value_type = std::pair<const std::string &, Value &>;
+        using value_type = Leaf;
         using pointer = value_type *;
         using reference = value_type &;
 
         Iterator() = default;
         explicit Iterator(Node *node) {
-            stack.push({node->prefix_, node});
+            stack.push(node);
             if (!next_leaf(0)) { // empty tree
-                stack = std::stack<std::pair<std::string, Node *>>();
-            } else {
-                value.reset(new value_type(stack.top().first, stack.top().second->leaf_->value));
+                stack = std::stack<Node *>();
             }
         }
 
         reference operator*() {
             assert(stack.size() > 0);
-            assert(value != nullptr);
-            return *value;
+            return *stack.top()->leaf_;
         }
 
         pointer operator->() {
             assert(stack.size() > 0);
-            assert(value != nullptr);
-            return value.get();
+            return stack.top()->leaf_;
         }
 
         bool operator==(const Iterator &other) const {
             if (stack.size() != other.stack.size()) {
                 return false;
             }
-            if (stack.empty() ||
-                (stack.size() > 0 && stack.top().second == other.stack.top().second)) {
+            if (stack.empty() || (stack.size() > 0 && stack.top() == other.stack.top())) {
                 return true;
             }
             return false;
@@ -84,16 +80,12 @@ template <typename Value> class AdaptiveRadixTree {
             assert(stack.size() > 0);
             uint16_t start_key = 0;
             while (!stack.empty() && !next_leaf(start_key)) { // not new leaf, pop top
-                if (!stack.top().second->prefix_.empty()) {   // non root node, only root
+                if (!stack.top()->prefix_.empty()) {          // non root node, only root
                                                               // node prefix is empty
-                    uint16_t next_key =
-                        static_cast<uint16_t>(stack.top().second->prefix_.front()) + 1;
+                    uint16_t next_key = static_cast<uint16_t>(stack.top()->prefix_.front()) + 1;
                     start_key = next_key;
                 }
                 stack.pop();
-            }
-            if (!stack.empty()) {
-                value.reset(new value_type(stack.top().first, stack.top().second->leaf_->value));
             }
             return *this;
         }
@@ -111,25 +103,25 @@ template <typename Value> class AdaptiveRadixTree {
             // static_cast<char>(start_key) << std::endl;
             bool new_leaf = false;
             do {
-                auto &[prefix, current] = stack.top();
+                Node *current = stack.top();
                 if (auto result = current->next_or_equal_key(start_key); result) {
                     auto *next = result->first;
-                    stack.push({prefix + next->prefix_, next});
+                    stack.push(next);
                     start_key = 0;
                     new_leaf = true;
                 } else {
                     break;
                 }
-            } while (stack.top().second->leaf_ == nullptr);
+            } while (stack.top()->leaf_ == nullptr);
             return new_leaf;
         }
-        std::unique_ptr<value_type> value;
-        std::stack<std::pair<std::string, Node *>> stack;
+        std::stack<Node *> stack;
     };
 
   private:
     Node *root = new Node4{""};
 };
+
 template <typename Value> struct AdaptiveRadixTree<Value>::Node {
     static constexpr size_t MaxChilds = 256;
     std::string prefix_;
@@ -180,6 +172,7 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node {
 
     [[nodiscard]] virtual size_t size() const noexcept { return size_; }
     [[nodiscard]] virtual bool is_full() const noexcept = 0;
+    [[nodiscard]] virtual bool should_shrink() const noexcept = 0;
     virtual bool insert(uint8_t key, Node *node) = 0;
     virtual Node **find(uint8_t key) = 0;
     virtual void remove(uint8_t key) = 0;
@@ -195,9 +188,10 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node {
 };
 
 template <typename Value> struct AdaptiveRadixTree<Value>::Leaf {
+    std::string key;
     Value value;
 
-    explicit Leaf(Value val) : value(std::move(val)) {}
+    explicit Leaf(std::string_view key, Value val) : key(key), value(std::move(val)) {}
 };
 
 template <typename Value> struct AdaptiveRadixTree<Value>::Node4 : public Node {
@@ -225,12 +219,13 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node4 : public Node {
     explicit Node4(Node16 &&node);
 
     ~Node4() override {
-        for (uint8_t i = 0; i < Node::Node::size(); i++) {
+        for (uint8_t i = 0; i < Node::size(); i++) {
             delete childs_[i];
         }
     }
 
     [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    [[nodiscard]] bool should_shrink() const noexcept override { return false; }
     bool insert(uint8_t key, Node *node) override {
         auto index = static_cast<size_t>(
             std::lower_bound(keys_.begin(), keys_.begin() + Node::Node::size(), key) -
@@ -255,6 +250,7 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node4 : public Node {
         if (index == Node::Node::size() || keys_[index] != key) {
             return;
         }
+        delete childs_[index];
         for (size_t i = index; i < Node::Node::size() - 1; i++) {
             keys_[i] = keys_[i + 1];
             childs_[i] = childs_[i + 1];
@@ -346,6 +342,9 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node16 : public Node 
     }
 
     [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    [[nodiscard]] bool should_shrink() const noexcept override {
+        return Node::size() <= Node4::SIZE;
+    }
     bool insert(uint8_t key, Node *node) override {
         auto index = static_cast<size_t>(
             std::lower_bound(keys_.begin(), keys_.begin() + Node::size(), key) - keys_.begin());
@@ -368,6 +367,7 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node16 : public Node 
         if (index == Node::size() || keys_[index] != key) {
             return;
         }
+        delete childs_[index];
         for (size_t i = index; i < Node::size() - 1; i++) {
             keys_[i] = keys_[i + 1];
             childs_[i] = childs_[i + 1];
@@ -459,6 +459,9 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node48 : public Node 
     }
 
     [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    [[nodiscard]] bool should_shrink() const noexcept override {
+        return Node::size() <= Node16::SIZE;
+    }
     bool insert(uint8_t key, Node *node) override {
         uint8_t index = keys_[key];
         if (index != SIZE) {
@@ -477,6 +480,7 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node48 : public Node 
     void remove(uint8_t key) override {
         if (uint8_t index = keys_[key]; index != SIZE) {
             keys_[key] = SIZE;
+            delete childs_[index];
             childs_[index] = nullptr;
             Node::size_ -= 1;
         }
@@ -545,12 +549,15 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node256 : public Node
     }
     explicit Node256(Node48 &&node);
     ~Node256() {
-        for (size_t i = 0; i < SIZE; i++) {
+        for (size_t i = 0; i < SIZE && Node::size() > 0; i++) {
             delete childs_[i];
         }
     }
 
     [[nodiscard]] bool is_full() const noexcept override { return Node::size() == SIZE; }
+    [[nodiscard]] bool should_shrink() const noexcept override {
+        return Node::size() <= Node48::SIZE;
+    }
     bool insert(uint8_t key, Node *node) override {
         if (childs_[key] == nullptr) {
             childs_[key] = node;
@@ -562,6 +569,7 @@ template <typename Value> struct AdaptiveRadixTree<Value>::Node256 : public Node
 
     void remove(uint8_t key) override {
         if (childs_[key] != nullptr) {
+            delete childs_[key];
             childs_[key] = nullptr;
             Node::size_ -= 1;
         }
@@ -654,13 +662,14 @@ AdaptiveRadixTree<Value>::Node16::Node16(Node48 &&node) : Node16("") { // 48 -> 
         if (child) {
             keys_[index] = static_cast<uint8_t>(i);
             childs_[index] = *child;
+            index += 1;
         }
     }
     Node::size_ = node.size_;
     Node::leaf_ = std::move(node.leaf_);
     node.childs_.fill(nullptr);
     node.leaf_ = nullptr;
-    node.Node::size_ = 0;
+    node.size_ = 0;
 }
 
 template <typename Value> AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node16::grow() {
@@ -743,6 +752,7 @@ AdaptiveRadixTree<Value>::Node *AdaptiveRadixTree<Value>::Node256::shrink() {
 template <typename Value> void AdaptiveRadixTree<Value>::insert(std::string_view key, Value value) {
     Node *current = root;
     Node **parent = &root;
+    std::string_view remain = key;
     while (!key.empty()) {
         size_t match_prefix = current->match(key);
         // std::cerr << "commmon_prefix = "
@@ -788,7 +798,7 @@ template <typename Value> void AdaptiveRadixTree<Value>::insert(std::string_view
     if (current->leaf_) {
         current->leaf_->value = value;
     } else {
-        current->leaf_ = new Leaf{value};
+        current->leaf_ = new Leaf{remain, value};
     }
 }
 
@@ -807,26 +817,87 @@ std::optional<Value> AdaptiveRadixTree<Value>::search(std::string_view key) {
         //                               key.length() - match_prefix)
         //           << std::endl;
         if (current->prefix_.length() > match_prefix) { // prefix not complete match
-            return {};
+            return std::nullopt;
         }
         key.remove_prefix(match_prefix);
         if (key.empty()) { // prefix complete match and remaining key is empty
             break;
         }
-        Node **p = current->find(key[0]);
-        if (p == nullptr) { // remaing key not next node to match
-            return {};
+        if (Node **next = current->find(key[0]); next) { // remaing key not next node to match
+            current = *next;
+        } else {
+            return std::nullopt;
         }
-        current = *p;
     }
     if (current->leaf_ != nullptr) {
         return {current->leaf_->value};
     }
-    return {};
+    return std::nullopt;
 }
 
 template <typename Value> bool AdaptiveRadixTree<Value>::remove(std::string_view key) {
-    return false;
+    Node **current = &root;
+    std::stack<Node **> stack;
+    while (!key.empty()) {
+        stack.push(current);
+        size_t match_prefix = (*current)->match(key);
+        // std::cerr << "commmon_prefix = "
+        //           << std::string_view(key.data(), match_prefix)
+        //           << " current_remaing = "
+        //           << std::string_view((*current)->prefix_.data() + match_prefix,
+        //                               (*current)->prefix_.length() - match_prefix)
+        //           << " key_remaing = "
+        //           << std::string_view(key.data() + match_prefix,
+        //                               key.length() - match_prefix)
+        //           << std::endl;
+        if ((*current)->prefix_.length() > match_prefix) { // prefix not complete match
+            return false;
+        }
+        key.remove_prefix(match_prefix);
+        if (key.empty()) { // prefix complete match and remaining key is empty
+            // std::cerr << "break\n";
+            break;
+        }
+        if (current = (*current)->find(key[0]); !current) {
+            return false;
+        }
+    }
+    if ((*current)->leaf_ == nullptr) {
+        return false;
+    }
+
+    delete (*current)->leaf_;
+    (*current)->leaf_ = nullptr;
+    if ((*current)->size() == 0) {
+        assert(stack.size() >= 2);
+        uint8_t k = (*current)->prefix_[0];
+        stack.pop();
+        (*stack.top())->remove(k);
+        if ((*stack.top())->should_shrink()) {
+            Node* new_node = (*stack.top())->shrink();
+            delete (*stack.top());
+            *stack.top() = new_node;
+        }
+    }
+
+    while (true) {
+        current = stack.top();
+        stack.pop();
+        if ((*current)->size() > 1 || current == &root || (*current)->leaf_) {
+            break;
+        }
+        // std::cerr << (*current)->prefix_ << "\n";
+        if (auto first_key = (*current)->first_key(); first_key) {
+            auto *next = first_key->first;
+            // std::cerr << "next " << next->prefix_ << "\n";
+
+            next->prefix_ = (*current)->prefix_ + next->prefix_;
+            (*current)->size_ = 0;
+            delete (*current);
+            *current = next;
+        }
+    }
+    return true;
 }
 
 template <typename Value> void AdaptiveRadixTree<Value>::debug() {
