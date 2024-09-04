@@ -10,27 +10,27 @@
 namespace co_io {
 
 template <typename P = void> struct Self {
-    bool await_ready() { return false; }
+    [[nodiscard]] bool await_ready() const noexcept { return false; }
 
-    bool await_suspend(std::coroutine_handle<P> h) {
+    bool await_suspend(std::coroutine_handle<P> h) noexcept {
         H = h;
         return false;
     }
 
-    auto await_resume() noexcept { return H; }
+    auto await_resume() const noexcept { return H; }
 
     std::coroutine_handle<P> H;
 };
 
 template <> struct Self<void> {
-    bool await_ready() { return false; }
+    [[nodiscard]] bool await_ready() const noexcept { return false; }
 
-    bool await_suspend(std::coroutine_handle<> h) {
+    bool await_suspend(std::coroutine_handle<> h) noexcept {
         H = h;
         return false;
     }
 
-    auto await_resume() noexcept { return H; }
+    [[nodiscard]] auto await_resume() const noexcept { return H; }
 
     std::coroutine_handle<> H;
 };
@@ -38,9 +38,10 @@ template <> struct Self<void> {
 struct PreviousAwaiter {
     std::coroutine_handle<> previous_handle_;
 
-    bool await_ready() const noexcept { return false; }
+    [[nodiscard]] bool await_ready() const noexcept { return false; }
 
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<>) const noexcept {
+    [[nodiscard]] std::coroutine_handle<>
+    await_suspend(std::coroutine_handle<> /*unused*/) const noexcept {
         return previous_handle_;
     }
 
@@ -48,8 +49,8 @@ struct PreviousAwaiter {
 };
 
 template <typename T = void> struct Promise {
-    std::coroutine_handle<> previous_handle_{};
-    std::exception_ptr exception_{};
+    std::coroutine_handle<> previous_handle_;
+    std::exception_ptr exception_;
     Uninitialized<T> result_;
 
     auto get_return_object() { return std::coroutine_handle<Promise>::from_promise(*this); }
@@ -68,11 +69,12 @@ template <typename T = void> struct Promise {
     }
 
     Promise &operator=(Promise &&) = delete;
+    ~Promise() = default;
 };
 
 template <> struct Promise<void> {
-    std::coroutine_handle<> previous_handle_{};
-    std::exception_ptr result_{};
+    std::coroutine_handle<> previous_handle_;
+    std::exception_ptr result_;
 
     auto get_return_object() { return std::coroutine_handle<Promise>::from_promise(*this); }
 
@@ -98,9 +100,7 @@ template <typename T, typename P = Promise<T>> class Task {
     using promise_type = P;
     using return_type = T;
 
-    Task(std::coroutine_handle<promise_type> handle) noexcept : handle_(handle) {
-        // std::cerr << "Task " << handle.address() << std::endl;
-    }
+    Task(std::coroutine_handle<promise_type> handle) noexcept : handle_(handle) {}
     Task(Task &&other) noexcept : handle_(other.handle_) { other.handle_ = nullptr; }
     Task &operator=(Task &&other) noexcept {
         using std::swap;
@@ -122,7 +122,7 @@ template <typename T, typename P = Promise<T>> class Task {
     struct Awaiter {
         std::coroutine_handle<promise_type> handle_;
 
-        bool await_ready() const noexcept { return false; }
+        [[nodiscard]] bool await_ready() const noexcept { return false; }
 
         std::coroutine_handle<promise_type>
         await_suspend(std::coroutine_handle<> h) const noexcept {
@@ -135,9 +135,9 @@ template <typename T, typename P = Promise<T>> class Task {
 
     Awaiter operator co_await() const noexcept { return {handle_}; }
 
-    std::coroutine_handle<promise_type> handle() const noexcept { return handle_; }
+    [[nodiscard]] std::coroutine_handle<promise_type> handle() const noexcept { return handle_; }
 
-    operator std::coroutine_handle<promise_type>() const noexcept { return handle_; }
+    explicit operator std::coroutine_handle<promise_type>() const noexcept { return handle_; }
 
     std::coroutine_handle<promise_type> release() noexcept {
         return std::exchange(handle_, nullptr);
@@ -149,10 +149,10 @@ template <typename T, typename P = Promise<T>> class Task {
 
 struct AutoDestoryPromise {
     struct AutoDestoryAwaiter {
-        bool await_ready() const noexcept { return false; }
-        void await_suspend(std::coroutine_handle<> h) const noexcept {
+        [[nodiscard]] bool await_ready() const noexcept { return false; }
+        void await_suspend(std::coroutine_handle<> handle) noexcept {
             // std::cerr << "AutoDestoryAwaiter " << h.address() << std::endl;
-            h.destroy();
+            handle.destroy();
         }
         void await_resume() const noexcept {}
     };
@@ -169,6 +169,7 @@ struct AutoDestoryPromise {
     void result() {}
 
     AutoDestoryPromise &operator=(AutoDestoryPromise &&) = delete;
+    ~AutoDestoryPromise() = default;
 };
 
 template <typename T> Task<void, AutoDestoryPromise> auto_destory(Task<T> task) {
